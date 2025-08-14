@@ -193,19 +193,10 @@ Share your project!
 
 ---
 
-## 🧑‍🏫 Want to Teach This?
-
-This template is perfect for workshops, bootcamps, or self-guided learning.  
-You can customize the theme (spy, wizard, detective, etc.) and teach each module live or asynchronously.
-
-Let me know if you'd like a **slide deck**, **radio drama script**, or **GitHub Template Repo** to help deliver the class.
-
----
-
 ## ✅ Ready to Begin?
 
 Let’s get started — your mission begins now.
 
-🕵️‍♂️ *Stay sharp. Stay stealthy. And above all… stay coded.*
+🕵️‍♂️ *Stay sharp. Stay stealthy. And above all… don't get caught.*
 
 Let me know how I can help! 🚀
