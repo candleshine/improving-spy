@@ -11,7 +11,7 @@ theme: default
 Build the backend API for a chat app (UI provided) that lets users chat with a secret agent you design. Your API will connect to an Ollama-based LLM, which will craft responses in your agent's unique style.
 
 **Week 1 Homework:**
-Define your agent's personality! Decide how your agent talks, acts, and responds. The personality you create this week will shape how the LLM replies to users through your API.
+Define your agent's personality! Decide how your agent talks, acts, and responds. The personality you create this week will shape how the LLM replies to users through your API
 ---
 
 # 🕵️ Week 1: Mission Briefing – Setup HQ
@@ -101,7 +101,7 @@ def read_root():
    uv run uvicorn src.main:app --reload
    ```
 
-   By default, this will start FastAPI on http://127.0.0.1:8000/.
+   By default, this will start FastAPI on <http://127.0.0.1:8000/>.
 
 ---
 
@@ -199,7 +199,7 @@ console = Console()
 console.print(Pretty(agent.dict()))
 ```
 
-- [ ] Challenge: Print your agent profile using Rich for extra style!
+Remember this is a python script, not a FastAPI app, so you can run it with `uv run agent.py`
 
 ---
 
