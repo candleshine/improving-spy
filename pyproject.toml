@@ -1,0 +1,14 @@
+[project]
+name = "improving-spy"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.116.1",
+    "fastcrud>=0.15.12",
+    "sqlalchemy>=2.0.43",
+    "uvicorn>=0.35.0",
+    "greenlet>=3.2.4",
+    "logfire[fastapi]>=4.3.3",
+]
