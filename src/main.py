@@ -1,10 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException
 from typing import AsyncGenerator
 from fastcrud import crud_router
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from pydantic import BaseModel
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, select
 # --- Database Setup ---
 DATABASE_URL = "sqlite+aiosqlite:///./test.db"
 engine = create_async_engine(DATABASE_URL, echo=True)
@@ -53,3 +53,22 @@ agent_router = crud_router(
 )
 
 app.include_router(agent_router)
+
+@app.get("/agents/codename/{codename}", tags=["Agents"])
+async def get_agent_by_codename(codename: str, session: AsyncSession = Depends(get_session)):
+    """Get an agent by their codename"""
+    # Create a select query filtered by codename
+    query = select(Agent).where(Agent.codename == codename)
+    
+    # Execute the query
+    result = await session.execute(query)
+    
+    # Get the first result (or None if no results)
+    agent = result.scalars().first()
+    
+    # If no agent was found, raise a 404 error
+    if agent is None:
+        raise HTTPException(status_code=404, detail=f"Agent with codename '{codename}' not found")
+    
+    # Return the agent
+    return agent

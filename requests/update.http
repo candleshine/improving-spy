@@ -1,8 +1,8 @@
-PUT http://127.0.0.1:8000/agents/1
+POST http://127.0.0.1:8000/agents
 Content-Type: application/json
 Accept: application/json
 
 {
-    "codename": "007",
-    "specialty": "Counterintelligence"
+    "codename": "Sunshine",
+    "specialty": "Driver"
 }

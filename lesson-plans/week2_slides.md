@@ -172,7 +172,7 @@ app.include_router(agent_router)
 
 ## 🏗️ In-Session Exercise
 
-- Implement `/create-agent` POST route
+- Implement `/agent/codename/{codename}` GET route
 - Test with curl or Postman
 - Instructor available for troubleshooting
 
