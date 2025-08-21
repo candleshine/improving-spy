@@ -16,7 +16,7 @@ from ..websocket_manager import manager
 
 # Create routers
 router = APIRouter(prefix="/api", tags=["Chat"])
-spy_router = APIRouter(prefix="/api/spies", tags=["Spies"])
+spy_router = APIRouter(prefix="/spies", tags=["Spies"])
 ws_router = APIRouter(prefix="/ws", tags=["WebSockets"])
 
 # Initialize repositories

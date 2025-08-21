@@ -1,0 +1,431 @@
+openapi: 3.1.0
+info:
+  title: "\U0001F575\uFE0F Spy Agent Chat API"
+  description: "\n    # Spy Agent Chat API with WebSockets\n    \n    This API allows\
+    \ you to chat with spy agents in real-time using WebSockets.\n    \n    ## WebSocket\
+    \ Endpoints\n    \n    * `/ws/chat/{spy_id}` - Chat with a spy agent in real-time\n\
+    \    * `/ws/chat/{spy_id}/conversation/{conversation_id}` - Chat with a spy agent\
+    \ using conversation history\n    \n    ## WebSocket Usage\n    \n    Connect\
+    \ to a WebSocket endpoint and send JSON messages with the following format:\n\
+    \    \n    ```json\n    {\n        \"message\": \"Your message to the spy agent\"\
+    \n    }\n    ```\n    \n    You will receive JSON responses with the following\
+    \ format:\n    \n    ```json\n    {\n        \"type\": \"response\",\n       \
+    \ \"spy_id\": \"spy-id\",\n        \"spy_name\": \"Spy Name\",\n        \"message\"\
+    : \"Your message\",\n        \"response\": \"Spy agent's response\"\n    }\n \
+    \   ```\n    \n    System messages have the following format:\n    \n    ```json\n\
+    \    {\n        \"type\": \"system\",\n        \"content\": \"System message\"\
+    \n    }\n    ```\n    \n    Error messages have the following format:\n    \n\
+    \    ```json\n    {\n        \"type\": \"error\",\n        \"content\": \"Error\
+    \ message\"\n    }\n    ```\n    "
+  version: 0.4.0
+paths:
+  /api/chat/{spy_id}:
+    post:
+      tags:
+      - Chat
+      summary: Chat With Spy
+      description: Chat with a spy agent without mission context.
+      operationId: chat_with_spy_api_chat__spy_id__post
+      parameters:
+      - name: spy_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Spy Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/debrief/{spy_id}/{mission_id}:
+    post:
+      tags:
+      - Chat
+      summary: Debrief With Spy
+      description: Debrief with a spy agent about a specific mission.
+      operationId: debrief_with_spy_api_debrief__spy_id___mission_id__post
+      parameters:
+      - name: spy_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Spy Id
+      - name: mission_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Mission Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/chat/{spy_id}/conversation/{conversation_id}:
+    post:
+      tags:
+      - Chat
+      summary: Chat With Conversation History
+      description: Chat with a spy agent using conversation history for context.
+      operationId: chat_with_conversation_history_api_chat__spy_id__conversation__conversation_id__post
+      parameters:
+      - name: spy_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Spy Id
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Conversation Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/conversation:
+    post:
+      tags:
+      - Chat
+      summary: Create New Conversation
+      description: Create a new conversation for a spy.
+      operationId: create_new_conversation_api_conversation_post
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Body_create_new_conversation_api_conversation_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Create New Conversation Api Conversation Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/api/spies/:
+    post:
+      tags:
+      - Chat
+      - Spies
+      summary: Create Spy
+      description: Create a new spy.
+      operationId: create_spy_api_api_spies__post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpyProfile'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpyProfile'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - Chat
+      - Spies
+      summary: List Spies
+      description: List all spies.
+      operationId: list_spies_api_api_spies__get
+      parameters:
+      - name: skip
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Skip
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 100
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SpyProfile'
+                title: Response List Spies Api Api Spies  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/api/spies/{spy_id}:
+    get:
+      tags:
+      - Chat
+      - Spies
+      summary: Get Spy
+      description: Get a spy by ID.
+      operationId: get_spy_api_api_spies__spy_id__get
+      parameters:
+      - name: spy_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Spy Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpyProfile'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - Chat
+      - Spies
+      summary: Update Spy
+      description: Update a spy.
+      operationId: update_spy_api_api_spies__spy_id__put
+      parameters:
+      - name: spy_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Spy Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpyProfile'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpyProfile'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - Chat
+      - Spies
+      summary: Delete Spy
+      description: Delete a spy.
+      operationId: delete_spy_api_api_spies__spy_id__delete
+      parameters:
+      - name: spy_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Spy Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Delete Spy Api Api Spies  Spy Id  Delete
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /:
+    get:
+      summary: Read Root
+      operationId: read_root__get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+components:
+  schemas:
+    Body_create_new_conversation_api_conversation_post:
+      properties:
+        spy_id:
+          type: string
+          title: Spy Id
+      type: object
+      required:
+      - spy_id
+      title: Body_create_new_conversation_api_conversation_post
+    ChatRequest:
+      properties:
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - message
+      title: ChatRequest
+    ChatResponse:
+      properties:
+        spy_id:
+          type: string
+          title: Spy Id
+        spy_name:
+          type: string
+          title: Spy Name
+        message:
+          type: string
+          title: Message
+        response:
+          type: string
+          title: Response
+        mission_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Mission Id
+        conversation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Conversation Id
+      type: object
+      required:
+      - spy_id
+      - spy_name
+      - message
+      - response
+      title: ChatResponse
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    SpyProfile:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        codename:
+          type: string
+          title: Codename
+        biography:
+          type: string
+          title: Biography
+        specialty:
+          type: string
+          title: Specialty
+      type: object
+      required:
+      - id
+      - name
+      - codename
+      - biography
+      - specialty
+      title: SpyProfile
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

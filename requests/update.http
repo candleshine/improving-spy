@@ -1,8 +1,11 @@
-POST http://127.0.0.1:8000/agents
+PUT http://127.0.0.1:8000/api/spies/spy-001
 Content-Type: application/json
 Accept: application/json
 
 {
-    "codename": "Sunshine",
-    "specialty": "Driver"
+    "id": "spy-001",
+    "name": "Isabelle Noir",
+    "codename": "007",
+    "biography": "Born to diplomatic parents in Geneva, Isabelle was recruited at age 22 after demonstrating exceptional linguistic abilities and analytical thinking.",
+    "specialty": "Counterintelligence"
 }

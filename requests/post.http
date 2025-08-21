@@ -1,8 +1,9 @@
-POST http://127.0.0.1:8000/agents/
+POST http://127.0.0.1:8000/api/spies/
 Content-Type: application/json
 Accept: application/json
 
 {
+    "id": "spy-001",
     "name": "Isabelle Noir",
     "codename": "Phantom Echo",
     "biography": "Born to diplomatic parents in Geneva, Isabelle was recruited at age 22 after demonstrating exceptional linguistic abilities and analytical thinking. Trained in counter-intelligence at Langley before field deployment across Eastern Europe. Known for her photographic memory and ability to adopt completely new personas within minutes. Has a distinctive habit of quoting obscure poetry during tense situations. Trust issues stemming from Budapest operation (2023) where her handler was compromised.",
