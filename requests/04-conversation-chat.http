@@ -1,0 +1,16 @@
+### Continue conversation with spy-007 (replace {conversation_id_007} with actual ID)
+POST http://localhost:8000/api/chat/spy-007/conversation/{conversation_id_007}
+Content-Type: application/json
+
+{
+  "message": "What do you remember about our last mission?"
+}
+
+###
+# Continue conversation with spy-008 (replace {conversation_id_008} with actual ID)
+POST http://localhost:8000/api/chat/spy-008/conversation/{conversation_id_008}
+Content-Type: application/json
+
+{
+  "message": "What's your opinion on MI6?"
+}

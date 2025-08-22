@@ -1,7 +1,7 @@
-from sqlalchemy import Column, String, Text
+from sqlalchemy import Column, String, Text, JSON
 from sqlalchemy.ext.declarative import declarative_base
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any
 
 # SQLAlchemy ORM Base
 Base = declarative_base()
@@ -32,14 +32,47 @@ class SpyProfile(BaseModel):
     biography: str
     specialty: str
 
+# Tool-related Models
+class ToolCall(BaseModel):
+    """A tool call requested by the model."""
+    id: str = Field(..., description="Unique identifier for the tool call")
+    name: str = Field(..., description="Name of the tool to call")
+    arguments: Dict[str, Any] = Field(..., description="Arguments for the tool call")
+
+class ToolCallResponse(BaseModel):
+    """Response from a tool call."""
+    tool_call_id: str = Field(..., description="ID of the tool call being responded to")
+    name: str = Field(..., description="Name of the tool that was called")
+    content: Dict[str, Any] = Field(..., description="Result of the tool call")
+
 # Request/Response Models
 class ChatRequest(BaseModel):
-    message: str
+    """Request model for chat endpoints."""
+    message: str = Field(..., description="The user's message")
+    tool_calls: Optional[List[ToolCall]] = Field(
+        None, 
+        description="Tool calls to process before generating a response"
+    )
+    tool_outputs: Optional[List[ToolCallResponse]] = Field(
+        None,
+        description="Outputs from previous tool calls"
+    )
 
 class ChatResponse(BaseModel):
-    spy_id: str
-    spy_name: str
-    message: str
-    response: str
-    mission_id: Optional[str] = None
-    conversation_id: Optional[str] = None
+    """Response model for chat endpoints."""
+    spy_id: str = Field(..., description="ID of the spy being talked to")
+    spy_name: str = Field(..., description="Name of the spy being talked to")
+    message: str = Field(..., description="The user's message")
+    response: str = Field(..., description="The spy's response")
+    tool_calls: Optional[List[ToolCall]] = Field(
+        None,
+        description="Tool calls requested by the model"
+    )
+    mission_id: Optional[str] = Field(
+        None,
+        description="[Deprecated] Mission ID for debriefing"
+    )
+    conversation_id: Optional[str] = Field(
+        None,
+        description="ID of the conversation, if applicable"
+    )

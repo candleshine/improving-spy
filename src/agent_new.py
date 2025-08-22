@@ -1,7 +1,4 @@
 from typing import Dict, Any, Optional, List, Union
-from typing import Dict, Any, Optional, List, Union
-from pydantic import BaseModel
-from typing import Dict, Any, Optional, List, Union
 from pydantic import BaseModel
 from pydantic_ai import Agent 
 from fastapi import HTTPException
@@ -10,14 +7,12 @@ from sqlalchemy.orm import Session
 from .models import SpyProfile
 from .repositories.spy_repository import SpyRepository
 from .tools.mission_tools import MissionTools
-from .tools.mission_tools import MissionTools
-from .tools.mission_tools import MissionTools
 
 class ToolResponse(BaseModel):
     """Response model for tool calls."""
     tool_call_id: str
     name: str
-    arguments: Dict[str, Any]
+    content: Dict[str, Any]
 
 class ChatAgent:
     """Agent that handles chat with tool calling support."""
@@ -136,7 +131,6 @@ def load_mission_summary(mission_id: str) -> str:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading mission file: {str(e)}")
 
-
 # -------------------------------
 # Chat with Message History
 # -------------------------------
@@ -162,3 +156,26 @@ async def chat_with_context(
     """
     agent = ChatAgent(spy_data)
     return await agent.chat(user_message, tool_calls, tool_outputs)
+
+# -------------------------------
+# Backward Compatibility
+# -------------------------------
+
+def chat_with_agent(user_message: str, spy: Union[SpyProfile, Dict[str, Any]], mission_summary: str = None) -> str:
+    """Legacy function for backward compatibility."""
+    agent = ChatAgent(spy)
+    response = agent.chat(user_message)
+    return response["response"]
+
+def debrief_mission(message: str, spy_id: str, mission_id: str, db: Session = None) -> str:
+    """Legacy function for backward compatibility."""
+    # Get spy from repository
+    spy_repository = SpyRepository()
+    spy = spy_repository.get_sync(db, spy_id)
+    
+    if not spy:
+        raise HTTPException(status_code=404, detail=f"Spy {spy_id} not found")
+
+    mission_summary = load_mission_summary(mission_id)
+    response = chat_with_agent(message, spy, mission_summary)
+    return response

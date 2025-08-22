@@ -1,0 +1,12 @@
+### Create a new conversation with spy-007
+POST http://localhost:8000/api/conversation
+Content-Type: application/x-www-form-urlencoded
+
+spy_id=spy-007
+
+###
+# Create a new conversation with spy-008
+POST http://localhost:8000/api/conversation
+Content-Type: application/x-www-form-urlencoded
+
+spy_id=spy-008

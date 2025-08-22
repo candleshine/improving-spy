@@ -1,0 +1,16 @@
+### Basic chat with a spy
+POST http://localhost:8000/api/chat/spy-007
+Content-Type: application/json
+
+{
+  "message": "What's your name and specialty?"
+}
+
+### 
+# Chat with the second spy
+POST http://localhost:8000/api/chat/spy-008
+Content-Type: application/json
+
+{
+  "message": "What's your name and what are you known for?"
+}

@@ -1,13 +1,15 @@
-from fastapi import APIRouter, HTTPException, Depends, Form, WebSocket, WebSocketDisconnect, status
-from typing import List
+from fastapi import APIRouter, HTTPException, Depends, Form, WebSocket, WebSocketDisconnect, status, Header
+from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from pydantic_ai.messages import ModelMessage
+import json
 
-from ..models import ChatRequest, ChatResponse, SpyProfile
+from ..models import ChatRequest, ChatResponse, SpyProfile, ToolCall, ToolCallResponse
 from ..agent import (
     chat_with_agent,
     debrief_mission,
-    chat_with_context
+    chat_with_context,
+    ChatAgent
 )
 from ..database import get_db
 from ..repositories.spy_repository import SpyRepository
@@ -28,13 +30,22 @@ conversation_repository = ConversationRepository()
 # -------------------------------
 
 @router.post("/chat/{spy_id}", response_model=ChatResponse)
-async def chat_with_spy(spy_id: str, request: ChatRequest, db: Session = Depends(get_db)):
-    """Chat with a spy agent without mission context."""
+async def chat_with_spy(
+    spy_id: str, 
+    request: ChatRequest, 
+    db: Session = Depends(get_db),
+    x_mission_id: Optional[str] = Header(None)
+):
+    """
+    Unified chat endpoint for all spy interactions.
+    
+    Supports both regular chat and mission debriefs through tool calling.
+    """
     spy = spy_repository.get_sync(db, spy_id)
     if not spy:
         raise HTTPException(status_code=404, detail=f"Spy {spy_id} not found")
 
-    # Convert spy object to dict for chat_with_agent
+    # Convert spy object to dict for the agent
     spy_data = {
         "id": spy.id,
         "name": spy.name,
@@ -42,36 +53,59 @@ async def chat_with_spy(spy_id: str, request: ChatRequest, db: Session = Depends
         "biography": spy.biography,
         "specialty": spy.specialty
     }
-    response = chat_with_agent(request.message, spy_data)
     
-    return ChatResponse(
-        spy_id=spy_id,
-        spy_name=spy.name,
-        message=request.message,
-        response=response
-    )
+    # Initialize the agent
+    agent = ChatAgent(spy_data)
+    
+    try:
+        # Get the response from the agent
+        result = await agent.chat(
+            message=request.message,
+            tool_calls=request.tool_calls,
+            tool_outputs=request.tool_outputs
+        )
+        
+        return ChatResponse(
+            spy_id=spy_id,
+            spy_name=spy.name,
+            message=request.message,
+            response=result["response"],
+            tool_calls=result.get("tool_calls", [])
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error processing chat request: {str(e)}"
+        )
 
 
-@router.post("/debrief/{spy_id}/{mission_id}", response_model=ChatResponse)
+@router.post("/debrief/{spy_id}/{mission_id}", response_model=ChatResponse, deprecated=True)
 async def debrief_with_spy(spy_id: str, mission_id: str, request: ChatRequest, db: Session = Depends(get_db)):
-    """Debrief with a spy agent about a specific mission."""
+    """
+    Deprecated: Use the unified chat endpoint with tool calling instead.
+    
+    Example:
+    ```
+    POST /api/chat/{spy_id}
+    {
+        "message": "What happened during the mission?",
+        "tool_calls": [
+            {
+                "name": "get_mission_context",
+                "arguments": {"mission_id": "mission-123"}
+            }
+        ]
+    }
+    """
     spy = spy_repository.get_sync(db, spy_id)
     if not spy:
         raise HTTPException(status_code=404, detail=f"Spy {spy_id} not found")
     
-    # Create a conversation for this debrief if needed
-    conversation_id = conversation_repository.create_sync(db, spy_id)
-    
-    # Get existing messages
-    messages = conversation_repository.get_message_history_sync(db, conversation_id)
-    
-    # Generate response
+    # For backward compatibility, we'll still process the request
     response = debrief_mission(request.message, spy_id, mission_id, db)
-    
-    # Store the updated conversation
-    messages.append(ModelMessage(role="user", content=request.message))
-    messages.append(ModelMessage(role="assistant", content=response))
-    conversation_repository.store_messages_sync(db, conversation_id, messages)
     
     return ChatResponse(
         spy_id=spy_id,
@@ -88,7 +122,11 @@ async def chat_with_conversation_history(
     request: ChatRequest,
     db: Session = Depends(get_db)
 ):
-    """Chat with a spy agent using conversation history for context."""
+    """
+    Chat with a spy agent using conversation history for context.
+    
+    Supports tool calling for mission context and other operations.
+    """
     spy = spy_repository.get_sync(db, spy_id)
     if not spy:
         raise HTTPException(status_code=404, detail=f"Spy {spy_id} not found")
@@ -97,6 +135,50 @@ async def chat_with_conversation_history(
     conversation = conversation_repository.get_sync(db, conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
+        
+    # Convert spy object to dict for the agent
+    spy_data = {
+        "id": spy.id,
+        "name": spy.name,
+        "codename": spy.codename,
+        "biography": spy.biography,
+        "specialty": spy.specialty
+    }
+    
+    # Get conversation history
+    messages = conversation_repository.get_message_history_sync(db, conversation_id)
+    
+    # Initialize the agent
+    agent = ChatAgent(spy_data)
+    
+    try:
+        # Get the response from the agent
+        result = await agent.chat(
+            message=request.message,
+            tool_calls=request.tool_calls,
+            tool_outputs=request.tool_outputs
+        )
+        
+        # Update conversation history
+        messages.append(ModelMessage(role="user", content=request.message))
+        messages.append(ModelMessage(role="assistant", content=result["response"]))
+        conversation_repository.store_messages_sync(db, conversation_id, messages)
+        
+        return ChatResponse(
+            spy_id=spy_id,
+            spy_name=spy.name,
+            message=request.message,
+            response=result["response"],
+            tool_calls=result.get("tool_calls", [])
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error processing chat request: {str(e)}"
+        )
     
     # Verify the conversation belongs to this spy
     if conversation.spy_id != spy_id:

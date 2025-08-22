@@ -56,41 +56,104 @@ class SpyAPIClient:
         )
         return response.json()
     
-    async def chat(self, spy_id: str, message: str) -> Dict[str, Any]:
-        """Send a message in chat mode"""
+    async def chat(
+        self, 
+        spy_id: str, 
+        message: str,
+        tool_calls: Optional[List[Dict]] = None,
+        tool_outputs: Optional[List[Dict]] = None
+    ) -> Dict[str, Any]:
+        """
+        Send a message in chat mode with optional tool calls.
+        
+        Args:
+            spy_id: ID of the spy to chat with
+            message: The message to send
+            tool_calls: List of tool calls to process
+            tool_outputs: Outputs from previous tool calls
+            
+        Returns:
+            Dict containing the response and any tool calls
+        """
         try:
+            payload = {"message": message}
+            if tool_calls:
+                payload["tool_calls"] = tool_calls
+            if tool_outputs:
+                payload["tool_outputs"] = tool_outputs
+                
             response = await self.client.post(
                 f"{self.base_url}/api/chat/{spy_id}",
-                json={"message": message}
+                json=payload
             )
             response.raise_for_status()
-            self._cache_chat_response(spy_id, message, response.json())
+            response_data = response.json()
+            self._cache_chat_response(spy_id, message, response_data)
             self.offline_mode = False
-            return response.json()
+            return response_data
         except (httpx.RequestError, httpx.HTTPStatusError) as e:
             logging.warning(f"API unavailable, using offline mode: {str(e)}")
             self.offline_mode = True
             return await self._generate_offline_response(spy_id, message)
     
     async def debrief(self, spy_id: str, mission_id: str, message: str) -> Dict[str, Any]:
-        """Send a message in debrief mode"""
+        """
+        [Deprecated] Send a message in debrief mode.
+        
+        Note: It's recommended to use the chat() method with tool calls instead.
+        Example:
+            await client.chat(
+                spy_id=spy_id,
+                message="What happened during the mission?",
+                tool_calls=[{
+                    "name": "get_mission_context",
+                    "arguments": {"mission_id": mission_id}
+                }]
+            )
+        """
         response = await self.client.post(
             f"{self.base_url}/api/debrief/{spy_id}/{mission_id}",
             json={"message": message}
         )
         return response.json()
     
-    async def chat_with_history(self, spy_id: str, conversation_id: str, message: str) -> Dict[str, Any]:
-        """Send a message with conversation history context"""
+    async def chat_with_history(
+        self, 
+        spy_id: str, 
+        conversation_id: str, 
+        message: str,
+        tool_calls: Optional[List[Dict]] = None,
+        tool_outputs: Optional[List[Dict]] = None
+    ) -> Dict[str, Any]:
+        """
+        Send a message with conversation history context and optional tool calls.
+        
+        Args:
+            spy_id: ID of the spy to chat with
+            conversation_id: ID of the conversation
+            message: The message to send
+            tool_calls: List of tool calls to process
+            tool_outputs: Outputs from previous tool calls
+            
+        Returns:
+            Dict containing the response and any tool calls
+        """
         try:
+            payload = {"message": message}
+            if tool_calls:
+                payload["tool_calls"] = tool_calls
+            if tool_outputs:
+                payload["tool_outputs"] = tool_outputs
+                
             response = await self.client.post(
                 f"{self.base_url}/api/chat/{spy_id}/conversation/{conversation_id}",
-                json={"message": message}
+                json=payload
             )
             response.raise_for_status()
-            self._cache_chat_response(spy_id, message, response.json(), conversation_id)
+            response_data = response.json()
+            self._cache_chat_response(spy_id, message, response_data, conversation_id)
             self.offline_mode = False
-            return response.json()
+            return response_data
         except (httpx.RequestError, httpx.HTTPStatusError) as e:
             logging.warning(f"API unavailable, using offline mode: {str(e)}")
             self.offline_mode = True

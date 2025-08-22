@@ -1,0 +1,29 @@
+### Create a test spy
+POST http://localhost:8000/api/spies/
+Content-Type: application/json
+
+{
+  "id": "spy-007",
+  "name": "James Bond",
+  "codename": "007",
+  "biography": "British Secret Service agent with a license to kill. Specializes in espionage, combat, and high-stakes missions.",
+  "specialty": "Espionage, combat, seduction"
+}
+
+### 
+# Create a second spy for testing
+POST http://localhost:8000/api/spies/
+Content-Type: application/json
+
+{
+  "id": "spy-008",
+  "name": "Alec Trevelyan",
+  "codename": "006",
+  "biography": "Former MI6 agent turned rogue. Expert in electronics and explosives. Has a personal vendetta against MI6.",
+  "specialty": "Electronics, explosives, infiltration"
+}
+
+### 
+# List all spies to verify creation
+GET http://localhost:8000/api/spies/
+Accept: application/json
