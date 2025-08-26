@@ -1,5 +1,5 @@
 ### Basic chat with a spy
-POST http://localhost:8000/api/chat/spy-007
+POST http://localhost:8000/api/chat/spy-008
 Content-Type: application/json
 
 {
@@ -8,9 +8,9 @@ Content-Type: application/json
 
 ### 
 # Chat with the second spy
-POST http://localhost:8000/api/chat/spy-008
+POST http://localhost:8000/api/chat/spy-007
 Content-Type: application/json
 
 {
-  "message": "What's your name and what are you known for?"
+  "message": "Do you know the rules to baccarat?"
 }

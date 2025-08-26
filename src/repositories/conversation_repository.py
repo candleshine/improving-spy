@@ -1,23 +1,76 @@
+"""Repository for managing conversation data and message history.
+
+This module provides both asynchronous and synchronous interfaces for interacting
+with conversation data in the database, including CRUD operations and message history management.
+"""
+
+from __future__ import annotations
+from typing import Optional, List, TypeVar
+import uuid
+
 from fastcrud import FastCRUD
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
-from sqlalchemy import select
-from ..models import Conversation
+from sqlalchemy import select, Result
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter
-import uuid
-from typing import Optional, List, Dict, Any, Union
+
+from ..models import Conversation
+
+_T = TypeVar('_T', bound='ConversationRepository')
 
 class ConversationRepository:
-    def __init__(self):
-        self.crud = FastCRUD(model=Conversation)
+    """Repository for managing conversation data and message history.
+    
+    Provides both asynchronous and synchronous interfaces for interacting with
+    conversation data in the database.
+    
+    Attributes:
+        crud: FastCRUD instance for basic CRUD operations on Conversation model
+    """
+    
+    def __init__(self: _T) -> None:
+        """Initialize a new ConversationRepository instance.
+        
+        Creates a FastCRUD instance for the Conversation model.
+        """
+        self.crud: FastCRUD = FastCRUD(model=Conversation)
     
     # Standard CRUD operations via FastCRUD
     async def get(self, session: AsyncSession, conversation_id: str) -> Optional[Conversation]:
-        """Get a conversation by ID asynchronously."""
+        """Get a conversation by ID asynchronously.
+        
+        Args:
+            session: The async database session to use for the query
+            conversation_id: The unique identifier of the conversation to retrieve
+            
+        Returns:
+            The Conversation object if found, None otherwise
+            
+        Example:
+            >>> async with async_session() as session:
+            ...     repo = ConversationRepository()
+            ...     conversation = await repo.get(session, "some-conversation-id")
+        """
         return await self.crud.get(session, id=conversation_id)
         
     async def create(self, session: AsyncSession, spy_id: str) -> str:
-        """Create a new conversation asynchronously and return its ID."""
+        """Create a new conversation asynchronously and return its ID.
+        
+        Args:
+            session: The async database session to use for the operation
+            spy_id: The ID of the spy this conversation belongs to
+            
+        Returns:
+            The newly created conversation's ID
+            
+        Raises:
+            sqlalchemy.exc.SQLAlchemyError: If there's an error creating the conversation
+            
+        Example:
+            >>> async with async_session() as session:
+            ...     repo = ConversationRepository()
+            ...     conv_id = await repo.create(session, "spy-123")
+        """
         conversation_id = str(uuid.uuid4())
         conversation_data = {
             "id": conversation_id,
@@ -27,17 +80,70 @@ class ConversationRepository:
         await self.crud.create(session, conversation_data)
         return conversation_id
     
-    async def list(self, session: AsyncSession, skip: int = 0, limit: int = 100) -> List[Conversation]:
-        """List all conversations with pagination asynchronously."""
+    async def list(
+        self, 
+        session: AsyncSession, 
+        skip: int = 0, 
+        limit: int = 100
+    ) -> List[Conversation]:
+        """List all conversations with pagination asynchronously.
+        
+        Args:
+            session: The async database session to use for the query
+            skip: Number of records to skip (for pagination)
+            limit: Maximum number of records to return (for pagination)
+            
+        Returns:
+            A list of Conversation objects
+            
+        Example:
+            >>> async with async_session() as session:
+            ...     repo = ConversationRepository()
+            ...     conversations = await repo.list(session, skip=0, limit=10)
+        """
         return await self.crud.get_multi(session, skip=skip, limit=limit)
     
     async def delete(self, session: AsyncSession, conversation_id: str) -> Optional[Conversation]:
-        """Delete a conversation asynchronously."""
+        """Delete a conversation asynchronously.
+        
+        Args:
+            session: The async database session to use for the operation
+            conversation_id: The ID of the conversation to delete
+            
+        Returns:
+            The deleted Conversation object if found, None otherwise
+            
+        Example:
+            >>> async with async_session() as session:
+            ...     repo = ConversationRepository()
+            ...     deleted = await repo.delete(session, "conversation-123")
+        """
         return await self.crud.delete(session, id=conversation_id)
     
     # Custom operations
-    async def store_messages(self, session: AsyncSession, conversation_id: str, messages: List[ModelMessage]):
-        """Store updated message history asynchronously."""
+    async def store_messages(
+        self, 
+        session: AsyncSession, 
+        conversation_id: str, 
+        messages: List[ModelMessage]
+    ) -> None:
+        """Store updated message history asynchronously.
+        
+        Args:
+            session: The async database session to use for the operation
+            conversation_id: The ID of the conversation to update
+            messages: List of ModelMessage objects to store
+            
+        Raises:
+            ValueError: If the conversation is not found
+            
+        Example:
+            >>> from pydantic_ai.messages import ModelMessage, Role
+            >>> messages = [ModelMessage(role=Role.USER, content="Hello")]
+            >>> async with async_session() as session:
+            ...     repo = ConversationRepository()
+            ...     await repo.store_messages(session, "conversation-123", messages)
+        """
         conversation = await self.get(session, conversation_id)
         if not conversation:
             raise ValueError(f"Conversation {conversation_id} not found")
@@ -46,30 +152,105 @@ class ConversationRepository:
         update_data = {"messages": messages_json}
         await self.crud.update(session, id=conversation_id, obj_in=update_data)
     
-    async def get_message_history(self, session: AsyncSession, conversation_id: str) -> List[ModelMessage]:
-        """Retrieve message history for a conversation asynchronously."""
+    async def get_message_history(
+        self, 
+        session: AsyncSession, 
+        conversation_id: str
+    ) -> List[ModelMessage]:
+        """Retrieve message history for a conversation asynchronously.
+        
+        Args:
+            session: The async database session to use for the query
+            conversation_id: The ID of the conversation to retrieve messages for
+            
+        Returns:
+            A list of ModelMessage objects representing the conversation history
+            
+        Raises:
+            ValueError: If there's an error deserializing the message history
+            
+        Example:
+            >>> async with async_session() as session:
+            ...     repo = ConversationRepository()
+            ...     messages = await repo.get_message_history(session, "conversation-123")
+        """
         conversation = await self.get(session, conversation_id)
         if not conversation or not conversation.messages:
             return []
         
         try:
-            return ModelMessagesTypeAdapter.validate_json(conversation.messages)
+            # First try to parse as is (for backward compatibility)
+            try:
+                return ModelMessagesTypeAdapter.validate_json(conversation.messages)
+            except Exception:
+                # If that fails, try to convert from the simple format to ModelMessage format
+                import json
+                messages = json.loads(conversation.messages)
+                model_messages = []
+                for msg in messages:
+                    if 'role' in msg and 'content' in msg:
+                        model_msg = ModelMessage(role=msg['role'], content=msg['content'])
+                        model_messages.append(model_msg)
+                return model_messages
         except Exception as e:
             raise ValueError(f"Failed to deserialize message history: {e}")
     
-    async def get_by_spy_id(self, session: AsyncSession, spy_id: str) -> List[Conversation]:
-        """Get all conversations for a spy asynchronously."""
+    async def get_by_spy_id(
+        self, 
+        session: AsyncSession, 
+        spy_id: str
+    ) -> List[Conversation]:
+        """Get all conversations for a specific spy asynchronously.
+        
+        Args:
+            session: The async database session to use for the query
+            spy_id: The ID of the spy to retrieve conversations for
+            
+        Returns:
+            A list of Conversation objects belonging to the specified spy
+            
+        Example:
+            >>> async with async_session() as session:
+            ...     repo = ConversationRepository()
+            ...     convos = await repo.get_by_spy_id(session, "spy-123")
+        """
         query = select(Conversation).where(Conversation.spy_id == spy_id)
-        result = await session.execute(query)
+        result: Result = await session.execute(query)
         return list(result.scalars().all())
     
-    # Sync versions for compatibility with existing code
+    # Synchronous versions for compatibility with existing code
+    
     def get_sync(self, session: Session, conversation_id: str) -> Optional[Conversation]:
-        """Get a conversation by ID (synchronous version)."""
+        """Synchronously get a conversation by ID.
+        
+        This is a synchronous version of the get() method for use in contexts
+        where async/await is not available.
+        
+        Args:
+            session: The SQLAlchemy session to use for the query
+            conversation_id: The unique identifier of the conversation to retrieve
+            
+        Returns:
+            The Conversation object if found, None otherwise
+        """
         return session.query(Conversation).filter(Conversation.id == conversation_id).first()
     
     def create_sync(self, session: Session, spy_id: str) -> str:
-        """Create a new conversation and return its ID (synchronous version)."""
+        """Synchronously create a new conversation and return its ID.
+        
+        This is a synchronous version of the create() method for use in contexts
+        where async/await is not available.
+        
+        Args:
+            session: The SQLAlchemy session to use for the operation
+            spy_id: The ID of the spy this conversation belongs to
+            
+        Returns:
+            The newly created conversation's ID
+            
+        Note:
+            This method commits the transaction within the function.
+        """
         conversation_id = str(uuid.uuid4())
         conversation = Conversation(
             id=conversation_id,
@@ -80,12 +261,43 @@ class ConversationRepository:
         session.commit()
         return conversation_id
     
-    def list_sync(self, session: Session, skip: int = 0, limit: int = 100) -> List[Conversation]:
-        """List all conversations with pagination (synchronous version)."""
+    def list_sync(
+        self, 
+        session: Session, 
+        skip: int = 0, 
+        limit: int = 100
+    ) -> List[Conversation]:
+        """Synchronously list all conversations with pagination.
+        
+        This is a synchronous version of the list() method for use in contexts
+        where async/await is not available.
+        
+        Args:
+            session: The SQLAlchemy session to use for the query
+            skip: Number of records to skip (for pagination)
+            limit: Maximum number of records to return (for pagination)
+            
+        Returns:
+            A list of Conversation objects
+        """
         return session.query(Conversation).offset(skip).limit(limit).all()
     
     def delete_sync(self, session: Session, conversation_id: str) -> bool:
-        """Delete a conversation (synchronous version)."""
+        """Synchronously delete a conversation.
+        
+        This is a synchronous version of the delete() method for use in contexts
+        where async/await is not available.
+        
+        Args:
+            session: The SQLAlchemy session to use for the operation
+            conversation_id: The ID of the conversation to delete
+            
+        Returns:
+            bool: True if the conversation was deleted, False if not found
+            
+        Note:
+            This method commits the transaction within the function.
+        """
         conversation = self.get_sync(session, conversation_id)
         if not conversation:
             return False
@@ -94,8 +306,28 @@ class ConversationRepository:
         session.commit()
         return True
     
-    def store_messages_sync(self, session: Session, conversation_id: str, messages: List[ModelMessage]):
-        """Store updated message history (synchronous version)."""
+    def store_messages_sync(
+        self, 
+        session: Session, 
+        conversation_id: str, 
+        messages: List[ModelMessage]
+    ) -> None:
+        """Synchronously store updated message history.
+        
+        This is a synchronous version of the store_messages() method for use in 
+        contexts where async/await is not available.
+        
+        Args:
+            session: The SQLAlchemy session to use for the operation
+            conversation_id: The ID of the conversation to update
+            messages: List of ModelMessage objects to store
+            
+        Raises:
+            ValueError: If the conversation is not found
+            
+        Note:
+            This method commits the transaction within the function.
+        """
         conversation = self.get_sync(session, conversation_id)
         if not conversation:
             raise ValueError(f"Conversation {conversation_id} not found")
@@ -104,17 +336,58 @@ class ConversationRepository:
         conversation.messages = messages_json
         session.commit()
     
-    def get_message_history_sync(self, session: Session, conversation_id: str) -> List[ModelMessage]:
-        """Retrieve message history for a conversation (synchronous version)."""
+    def get_message_history_sync(
+        self, 
+        session: Session, 
+        conversation_id: str
+    ) -> List[ModelMessage]:
+        """Synchronously retrieve message history for a conversation.
+        
+        This is a synchronous version of the get_message_history() method for use in 
+        contexts where async/await is not available.
+        
+        Args:
+            session: The SQLAlchemy session to use for the query
+            conversation_id: The ID of the conversation to retrieve messages for
+            
+        Returns:
+            A list of ModelMessage objects representing the conversation history
+            
+        Raises:
+            ValueError: If there's an error deserializing the message history
+        """
         conversation = self.get_sync(session, conversation_id)
         if not conversation or not conversation.messages:
             return []
         
         try:
-            return ModelMessagesTypeAdapter.validate_json(conversation.messages)
+            # First try to parse as is (for backward compatibility)
+            try:
+                return ModelMessagesTypeAdapter.validate_json(conversation.messages)
+            except Exception:
+                # If that fails, try to convert from the simple format to ModelMessage format
+                import json
+                messages = json.loads(conversation.messages)
+                model_messages = []
+                for msg in messages:
+                    if 'role' in msg and 'content' in msg:
+                        model_msg = ModelMessage(role=msg['role'], content=msg['content'])
+                        model_messages.append(model_msg)
+                return model_messages
         except Exception as e:
             raise ValueError(f"Failed to deserialize message history: {e}")
     
     def get_by_spy_id_sync(self, session: Session, spy_id: str) -> List[Conversation]:
-        """Get all conversations for a spy (synchronous version)."""
+        """Synchronously get all conversations for a specific spy.
+        
+        This is a synchronous version of the get_by_spy_id() method for use in 
+        contexts where async/await is not available.
+        
+        Args:
+            session: The SQLAlchemy session to use for the query
+            spy_id: The ID of the spy to retrieve conversations for
+            
+        Returns:
+            A list of Conversation objects belonging to the specified spy
+        """
         return session.query(Conversation).filter(Conversation.spy_id == spy_id).all()

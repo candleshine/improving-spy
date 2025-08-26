@@ -1,12 +1,19 @@
 ### Create a new conversation with spy-007
+# createConversation
+# @name createConversation
 POST http://localhost:8000/api/conversation
 Content-Type: application/x-www-form-urlencoded
 
-spy_id=spy-007
+spy_id=spy-009
 
-###
-# Create a new conversation with spy-008
-POST http://localhost:8000/api/conversation
-Content-Type: application/x-www-form-urlencoded
+### 
+@conversationId = {{createConversation.response.body.conversation_id}}
 
-spy_id=spy-008
+### Send a message to the conversation
+POST http://localhost:8000/api/chat/spy-009/conversation/{{conversationId}}
+Content-Type: application/json
+
+{
+    "message": "What are your specialties?"
+}
+

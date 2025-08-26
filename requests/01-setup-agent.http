@@ -16,10 +16,10 @@ POST http://localhost:8000/api/spies/
 Content-Type: application/json
 
 {
-  "id": "spy-008",
-  "name": "Alec Trevelyan",
-  "codename": "006",
-  "biography": "Former MI6 agent turned rogue. Expert in electronics and explosives. Has a personal vendetta against MI6.",
+  "id": "spy-009",
+  "name": "Brian O'Neil",
+  "codename": "Sunshine",
+  "biography": "Former MI6 agent turned rogue. Expert in electronics and explosives. Has a personal vendetta against MI6. Heavy Scottish accent. Tends to be brusque and inventive in insults",
   "specialty": "Electronics, explosives, infiltration"
 }
 

@@ -1,14 +1,15 @@
-### Continue conversation with spy-007 (replace {conversation_id_007} with actual ID)
-POST http://localhost:8000/api/chat/spy-007/conversation/{conversation_id_007}
-Content-Type: application/json
+### Create a new conversation with spy-008
+# @name createAnotherConversation
+POST http://localhost:8000/api/conversation
+Content-Type: application/x-www-form-urlencoded
 
-{
-  "message": "What do you remember about our last mission?"
-}
+spy_id=spy-009
 
-###
-# Continue conversation with spy-008 (replace {conversation_id_008} with actual ID)
-POST http://localhost:8000/api/chat/spy-008/conversation/{conversation_id_008}
+### 
+@conversationId = {{createAnotherConversation.response.body.conversation_id}}
+
+### Continue conversation with spy-008
+POST http://localhost:8000/api/chat/spy-009/conversation/{{conversationId}}
 Content-Type: application/json
 
 {

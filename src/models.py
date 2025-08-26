@@ -23,6 +23,7 @@ class Conversation(Base):
     id = Column(String, primary_key=True)
     spy_id = Column(String, nullable=False)
     messages = Column(Text, nullable=False)  # JSON-serialized message history
+    mission_id = Column(String, nullable=True)
 
 # Pydantic Models (for API)
 class SpyProfile(BaseModel):

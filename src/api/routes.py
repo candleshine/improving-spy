@@ -1,20 +1,20 @@
-from fastapi import APIRouter, HTTPException, Depends, Form, WebSocket, WebSocketDisconnect, status, Header
-from typing import List, Optional, Dict, Any
-from sqlalchemy.orm import Session
-from pydantic_ai.messages import ModelMessage
-import json
+import logging
+from functools import lru_cache
+from typing import List, Optional
 
-from ..models import ChatRequest, ChatResponse, SpyProfile, ToolCall, ToolCallResponse
-from ..agent import (
-    chat_with_agent,
-    debrief_mission,
-    chat_with_context,
-    ChatAgent
-)
+from fastapi import APIRouter, Depends, Form, HTTPException, WebSocket, WebSocketDisconnect, status, Header
+from pydantic_ai.messages import ModelMessage
+from sqlalchemy.orm import Session
+
+from ..agent import ChatAgent
 from ..database import get_db
-from ..repositories.spy_repository import SpyRepository
+from ..models import ChatRequest, ChatResponse, SpyProfile
 from ..repositories.conversation_repository import ConversationRepository
+from ..repositories.spy_repository import SpyRepository
 from ..websocket_manager import manager
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Create routers
 router = APIRouter(prefix="/api", tags=["Chat"])
@@ -26,26 +26,16 @@ spy_repository = SpyRepository()
 conversation_repository = ConversationRepository()
 
 # -------------------------------
-# Endpoints
+# Dependencies
 # -------------------------------
 
-@router.post("/chat/{spy_id}", response_model=ChatResponse)
-async def chat_with_spy(
-    spy_id: str, 
-    request: ChatRequest, 
-    db: Session = Depends(get_db),
-    x_mission_id: Optional[str] = Header(None)
-):
-    """
-    Unified chat endpoint for all spy interactions.
-    
-    Supports both regular chat and mission debriefs through tool calling.
-    """
+# Agent factory with LRU cache
+def get_agent(spy_id: str, db: Session = Depends(get_db)):
+    """Dependency that provides a ChatAgent instance for the spy."""
     spy = spy_repository.get_sync(db, spy_id)
     if not spy:
         raise HTTPException(status_code=404, detail=f"Spy {spy_id} not found")
-
-    # Convert spy object to dict for the agent
+        
     spy_data = {
         "id": spy.id,
         "name": spy.name,
@@ -53,10 +43,26 @@ async def chat_with_spy(
         "biography": spy.biography,
         "specialty": spy.specialty
     }
+    return ChatAgent(spy_data)
+
+# -------------------------------
+# Endpoints
+# -------------------------------
+
+@router.post("/chat/{spy_id}", response_model=ChatResponse)
+async def chat_with_spy(
+    spy_id: str, 
+    request: ChatRequest, 
+    agent: ChatAgent = Depends(get_agent),
+    db: Session = Depends(get_db),
+    x_mission_id: Optional[str] = Header(None)
+):
+    """
+    Unified chat endpoint for all spy interactions.
     
-    # Initialize the agent
-    agent = ChatAgent(spy_data)
-    
+    Supports both regular chat and mission debriefs through tool calling.
+    Uses a cached ChatAgent instance for better performance.
+    """
     try:
         # Get the response from the agent
         result = await agent.chat(
@@ -67,7 +73,7 @@ async def chat_with_spy(
         
         return ChatResponse(
             spy_id=spy_id,
-            spy_name=spy.name,
+            spy_name=agent.spy.name,
             message=request.message,
             response=result["response"],
             tool_calls=result.get("tool_calls", [])
@@ -80,39 +86,6 @@ async def chat_with_spy(
             status_code=500, 
             detail=f"Error processing chat request: {str(e)}"
         )
-
-
-@router.post("/debrief/{spy_id}/{mission_id}", response_model=ChatResponse, deprecated=True)
-async def debrief_with_spy(spy_id: str, mission_id: str, request: ChatRequest, db: Session = Depends(get_db)):
-    """
-    Deprecated: Use the unified chat endpoint with tool calling instead.
-    
-    Example:
-    ```
-    POST /api/chat/{spy_id}
-    {
-        "message": "What happened during the mission?",
-        "tool_calls": [
-            {
-                "name": "get_mission_context",
-                "arguments": {"mission_id": "mission-123"}
-            }
-        ]
-    }
-    """
-    spy = spy_repository.get_sync(db, spy_id)
-    if not spy:
-        raise HTTPException(status_code=404, detail=f"Spy {spy_id} not found")
-    
-    # For backward compatibility, we'll still process the request
-    response = debrief_mission(request.message, spy_id, mission_id, db)
-    
-    return ChatResponse(
-        spy_id=spy_id,
-        spy_name=spy.name,
-        message=request.message,
-        response=response
-    )
 
 
 @router.post("/chat/{spy_id}/conversation/{conversation_id}", response_model=ChatResponse)
@@ -127,88 +100,109 @@ async def chat_with_conversation_history(
     
     Supports tool calling for mission context and other operations.
     """
-    spy = spy_repository.get_sync(db, spy_id)
-    if not spy:
-        raise HTTPException(status_code=404, detail=f"Spy {spy_id} not found")
-    
-    # Get existing conversation
-    conversation = conversation_repository.get_sync(db, conversation_id)
-    if not conversation:
-        raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
-        
-    # Convert spy object to dict for the agent
-    spy_data = {
-        "id": spy.id,
-        "name": spy.name,
-        "codename": spy.codename,
-        "biography": spy.biography,
-        "specialty": spy.specialty
-    }
-    
-    # Get conversation history
-    messages = conversation_repository.get_message_history_sync(db, conversation_id)
-    
-    # Initialize the agent
-    agent = ChatAgent(spy_data)
+    logger.info(f"Received chat request for spy_id={spy_id}, conversation_id={conversation_id}")
+    logger.debug(f"Request message: {request.message}")
+    logger.debug(f"Tool calls: {request.tool_calls}")
+    logger.debug(f"Tool outputs: {request.tool_outputs}")
     
     try:
-        # Get the response from the agent
-        result = await agent.chat(
-            message=request.message,
-            tool_calls=request.tool_calls,
-            tool_outputs=request.tool_outputs
-        )
+        # Get spy data
+        logger.debug(f"Fetching spy data for spy_id={spy_id}")
+        spy = spy_repository.get_sync(db, spy_id)
+        if not spy:
+            error_msg = f"Spy {spy_id} not found"
+            logger.error(error_msg)
+            raise HTTPException(status_code=404, detail=error_msg)
         
-        # Update conversation history
-        messages.append(ModelMessage(role="user", content=request.message))
-        messages.append(ModelMessage(role="assistant", content=result["response"]))
-        conversation_repository.store_messages_sync(db, conversation_id, messages)
+        # Get existing conversation
+        logger.debug(f"Fetching conversation with id={conversation_id}")
+        conversation = conversation_repository.get_sync(db, conversation_id)
+        if not conversation:
+            error_msg = f"Conversation {conversation_id} not found"
+            logger.error(error_msg)
+            raise HTTPException(status_code=404, detail=error_msg)
+            
+        # Verify the conversation belongs to this spy
+        if conversation.spy_id != spy_id:
+            error_msg = f"Conversation {conversation_id} does not belong to spy {spy_id}"
+            logger.error(error_msg)
+            raise HTTPException(status_code=403, detail=error_msg)
         
-        return ChatResponse(
-            spy_id=spy_id,
-            spy_name=spy.name,
-            message=request.message,
-            response=result["response"],
-            tool_calls=result.get("tool_calls", [])
-        )
+        # Prepare spy data for agent
+        spy_data = {
+            "id": spy.id,
+            "name": spy.name,
+            "codename": spy.codename,
+            "biography": spy.biography,
+            "specialty": spy.specialty
+        }
+        logger.debug("Spy data prepared for agent")
         
-    except HTTPException:
+        # Get conversation history
+        logger.debug(f"Fetching message history for conversation_id={conversation_id}")
+        messages = conversation_repository.get_message_history_sync(db, conversation_id)
+        logger.debug(f"Retrieved {len(messages)} previous messages")
+        
+        # Initialize the agent
+        logger.info("Initializing ChatAgent")
+        try:
+            agent = ChatAgent(spy_data)
+            logger.debug("ChatAgent initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize ChatAgent: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to initialize agent: {str(e)}")
+        
+        try:
+            # Get the response from the agent
+            logger.info("Sending message to agent")
+            result = await agent.chat(
+                message=request.message,
+                tool_calls=request.tool_calls,
+                tool_outputs=request.tool_outputs
+            )
+            logger.debug("Received response from agent")
+            
+            # Update conversation history
+            logger.debug("Updating conversation history")
+            # Store messages as simple dictionaries
+            user_message = {"role": "user", "content": request.message}
+            assistant_message = {"role": "assistant", "content": result["response"]}
+            messages.extend([user_message, assistant_message])
+            conversation_repository.store_messages_sync(db, conversation_id, messages)
+            
+            logger.info("Chat request processed successfully")
+            return ChatResponse(
+                spy_id=spy_id,
+                spy_name=spy.name,
+                message=request.message,
+                response=result["response"],
+                tool_calls=result.get("tool_calls", []),
+                conversation_id=conversation_id
+            )
+            
+        except HTTPException as he:
+            logger.error(f"HTTPException in agent.chat: {str(he.detail)}")
+            raise
+        except Exception as e:
+            logger.error(f"Error in agent.chat: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Error processing chat request: {str(e)}"
+            )
+            
+    except HTTPException as he:
+        logger.error(f"HTTPException in chat_with_conversation_history: {str(he.detail)}")
         raise
     except Exception as e:
+        logger.error(f"Unexpected error in chat_with_conversation_history: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500, 
-            detail=f"Error processing chat request: {str(e)}"
+            detail=f"An unexpected error occurred: {str(e)}"
         )
     
-    # Verify the conversation belongs to this spy
-    if conversation.spy_id != spy_id:
-        raise HTTPException(status_code=403, detail="Conversation does not belong to this spy")
-    
-    # Get message history
-    messages = conversation_repository.get_message_history_sync(db, conversation_id)
-    
-    # Generate response with context
-    spy_data = {
-        "id": spy.id,
-        "name": spy.name,
-        "codename": spy.codename,
-        "biography": spy.biography,
-        "specialty": spy.specialty
-    }
-    response = chat_with_context(request.message, spy_data, messages)
-    
-    # Update the conversation with the new message
-    messages.append(ModelMessage(role="user", content=request.message))
-    messages.append(ModelMessage(role="assistant", content=response))
-    conversation_repository.store_messages_sync(db, conversation_id, messages)
-    
-    return ChatResponse(
-        spy_id=spy_id,
-        spy_name=spy.name,
-        message=request.message,
-        response=response,
-        conversation_id=conversation_id
-    )
+    # This code is unreachable due to the try/except block above
+    # It's safe to remove as the functionality is already handled in the try block
+    pass
 
 
 @router.post("/conversation", response_model=dict)

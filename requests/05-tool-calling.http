@@ -1,29 +1,16 @@
 ### Ask about a mission (will trigger tool call)
-POST http://localhost:8000/api/chat/spy-007
+POST http://localhost:8000/api/chat/spy-009
 Content-Type: application/json
 
 {
-  "message": "What happened during the Paris mission?",
-  "tool_calls": [
-    {
-      "name": "get_mission_context",
-      "arguments": {"mission_id": "paris"}
-    }
-  ]
+  "message": "What happened during the mission id paris?"
 }
 
 ### 
 # Continue with tool outputs (replace {tool_call_id} with actual ID from previous response)
-POST http://localhost:8000/api/chat/spy-007
+POST http://localhost:8000/api/chat/spy-009
 Content-Type: application/json
 
 {
-  "message": "I have the mission details now",
-  "tool_outputs": [
-    {
-      "tool_call_id": "{tool_call_id}",
-      "name": "get_mission_context",
-      "content": "Mission Paris was a success. Extracted the target and left no trace."
-    }
-  ]
+  "message": "I have the mission details now"
 }
