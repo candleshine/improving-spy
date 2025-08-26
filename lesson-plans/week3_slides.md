@@ -6,52 +6,61 @@ title: "🕵️ Week 3: Building Intelligent Agents with PydanticAI"
 ---
 
 # 🕵️ Week 3: Building Intelligent Agents
+
 ## With PydanticAI
 
-### Learning Objectives:
+### Learning Objectives
+
 - Understand core agentic AI concepts
 - Master PydanticAI for LLM interactions
 - Implement tool calling and conversation management
 - Build a production-ready chat agent
+- Implement mission context awareness
 
 ---
 
 ## What is an Agentic AI System?
 
-### Key Components:
-- **LLM Core**: The brain that processes and generates text
-- **Tools**: Specialized functions the agent can use
-- **Memory**: Conversation history and context
-- **Orchestration**: Managing the flow of information
+### Key Components
 
-### Why PydanticAI?
-- Type-safe LLM interactions
-- Built-in tool calling support
-- Easy integration with Python ecosystem
-- Production-ready features
+- **LLM Core**: Processes and generates text (using Ollama/Llama3)
+- **Tools**: Mission context retrieval, conversation management
+- **Memory**: Conversation history with persistence
+- **Context Awareness**: Mission-specific knowledge integration
+
+### Implementation Highlights
+
+- **Type Safety**: Pydantic models throughout
+- **Caching**: Mission context caching for performance
+- **Error Handling**: Robust error handling and logging
+- **Modular Design**: Separated concerns (agent, tools, repositories)
 
 ---
 
 ## Session Roadmap
 
 ### 1. PydanticAI Fundamentals
-   - Basic chat interactions
-   - System prompts and message formatting
+
+- Basic chat interactions
+- System prompts and message formatting
 
 ### 2. Tool Calling
-   - Defining tools with Pydantic models
-   - Basic and advanced tool usage
-   - Error handling and validation
+
+- Defining tools with Pydantic models
+- Basic and advanced tool usage
+- Error handling and validation
 
 ### 3. Conversation Management
-   - Message history
-   - Context windows
-   - Persistence
+
+- Message history
+- Context windows
+- Persistence
 
 ### 4. Building the Chat Agent
-   - Endpoint design
-   - Error handling
-   - Testing and deployment
+
+- Endpoint design
+- Error handling
+- Testing and deployment
 
 ---
 
@@ -63,43 +72,90 @@ title: "🕵️ Week 3: Building Intelligent Agents with PydanticAI"
 
 ---
 
-## PydanticAI Core Concepts
+## Core Implementation
 
-### 1. Basic Chat
+### 1. ChatAgent Initialization
+
 ```python
-from pydantic_ai import OpenAI
-
-# Initialize the AI
-ai = OpenAI(model='ollama/llama2')
-
-# Simple chat
-response = await ai.run("Hello, how are you?")
-print(response.content)
+class ChatAgent:
+    def __init__(self, spy: Union[SpyProfile, Dict[str, Any]]):
+        # Initialize with Ollama provider
+        model = OpenAIModel(
+            'llama3.2',
+            provider=OllamaProvider(base_url='http://localhost:11434/v1'),
+        )
+        
+        # Initialize with mission context tool
+        mission_tool = Tool(
+            name="get_mission_context",
+            description="Retrieve mission details by ID",
+            function=self._get_mission_context
+        )
+        
+        self.ai = Agent(
+            model,
+            system_prompt=self._get_system_prompt(),
+            tools=[mission_tool]
+        )
+        self._mission_cache = {}
 ```
 
-### 2. System Prompts
-```python
-# Define system behavior
-system = """You are a helpful AI assistant that specializes in spy operations.
-Be concise and professional in your responses.
-If you don't know something, say so."""
+---
 
-response = await ai.run(
-    "What's the weather like?",
-    system=system
-)
+### 2. Mission Context Tool
+
+```python
+class MissionTools:
+    @staticmethod
+    def get_mission_context(mission_id: str) -> Dict[str, Any]:
+        """Retrieve mission context from file system."""
+        mission_path = Path(f"missions/{mission_id}.txt")
+        
+        if not mission_path.exists():
+            return {
+                "mission_id": mission_id,
+                "error": f"Mission not found: {mission_id}",
+                "status": "error"
+            }
+            
+        try:
+            content = mission_path.read_text(encoding="utf-8")
+            return {
+                "mission_id": mission_id,
+                "content": content,
+                "status": "success"
+            }
+        except Exception as e:
+            return {
+                "mission_id": mission_id,
+                "error": str(e),
+                "status": "error"
+            }
 ```
 
-### 3. Message History
-```python
-from pydantic_ai.messages import ModelMessage
+---
 
-messages = [
-    ModelMessage(role="user", content="Hello!"),
-    ModelMessage(role="assistant", content="Hi there! How can I help?")
-]
+### 3. Conversation Management
+
+```python
+class ConversationRepository:
+    def __init__(self):
+        self.crud = FastCRUD(model=Conversation)
+    
+    async def create(self, session: AsyncSession, spy_id: str) -> str:
+        """Create a new conversation."""
+        conversation_id = str(uuid.uuid4())
+        conversation_data = {
+            "id": conversation_id,
+            "spy_id": spy_id,
+            "messages": "[]"
+        }
+        await self.crud.create(session, conversation_data)
+        return conversation_id
+```
 
 response = await ai.run("What was my first message?", messages=messages)
+
 ```
 
 ---
@@ -117,12 +173,30 @@ uv add pydantic-ai ollama
 ## 2. Tool Calling with PydanticAI
 
 ### Why Use Tools?
+
 - Extend LLM capabilities with custom functions
 - Access external data and services
 - Maintain clean separation of concerns
 - Enable dynamic behavior based on context
 
+---
+
+### A Plain tool
+
+```python
+@agent.tool_plain
+def get_current_ip_address() -> str:
+    """Get public IP address using ifconfig.me website"""
+    command = ['curl','ifconfig.me']
+    result = subprocess.run(command, capture_output=True, text=True)
+    #print(result.stdout)
+    return result.stdout
+```
+
+---
+
 ### Defining a Tool
+
 ```python
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -139,6 +213,7 @@ async def get_mission_context(mission_id: str) -> dict:
 ```
 
 ### Registering Tools with the Agent
+
 ```python
 from pydantic_ai import Agent, Tool
 
@@ -165,6 +240,7 @@ agent = Agent(
 ## From Static Prompts to Dynamic Tools
 
 ### Old Way: Static Context
+
 ```python
 prompt = f"""You are {spy.name}. {spy.biography}
 Mission Summary: {mission_details}
@@ -172,6 +248,7 @@ User: {message}"""
 ```
 
 ### New Way: Dynamic Tool Calling
+
 ```python
 # Agent can now fetch mission details on demand
 response = await agent.chat(
@@ -188,6 +265,7 @@ response = await agent.chat(
 ## Using the New System
 
 ### Basic Chat Example
+
 ```python
 # Simple chat with no tool calls
 response = await client.chat(
@@ -200,6 +278,7 @@ print(f"{response['spy_name']}: {response['response']}")
 ---
 
 ### Tool Calling in Action
+
 ```python
 async def chat_with_context(
     user_message: str,
@@ -225,6 +304,9 @@ async def chat_with_context(
     return await agent.chat(user_message, tool_calls, tool_outputs)
 ```
 
+---
+
+```
 def _get_tool_by_name(self, name: str) -> Optional[Dict]:
     """Get a tool by its name."""
     return next((t for t in self.tools if t["name"] == name), None)
@@ -252,11 +334,14 @@ async def _handle_tool_call(self, tool_call: Dict) -> Dict:
         }
 ```
 
+---
+
 ### Example Usage
+
 ```python
 # Start a conversation about a mission
 response = await chat_with_tools(
-    "What's the status of Operation Midnight?",
+    "What's the status of mission id paris?",
     spy_id="spy-007",
     conversation_id="conv-123"
 )
@@ -339,15 +424,18 @@ Stay in character as {self.spy.name} at all times."""
 ## Unified Chat with Tool Calling
 
 ### Before: Separate Endpoints
+
 - `/chat/{spy_id}` - General chat
 - `/debrief/{spy_id}/{mission_id}` - Mission-specific chat
 
 ### After: Single Endpoint
+
 - `/chat/{spy_id}` - Handles both modes
 - Uses tool calling for mission context
 - More flexible and maintainable
 
 ### Tool Implementation
+
 ```python
 class MissionTools:
     @staticmethod
@@ -359,11 +447,26 @@ class MissionTools:
         return {"mission_id": mission_id, "content": content}
 ```
 
-### 1. Define Your Tools
+### 1. Tool Definition with Pydantic
+
 ```python
+from pydantic import BaseModel, Field
+
+class MissionContextRequest(BaseModel):
+    """Request model for getting mission context."""
+    mission_id: str = Field(..., description="The ID of the mission to get context for")
+
 class MissionTools:
     @staticmethod
     def get_mission_context(mission_id: str) -> Dict[str, Any]:
+        """Retrieve mission context with caching."""
+        if mission_id in self._mission_cache:
+            return self._mission_cache[mission_id]
+            
+        result = MissionTools.get_mission_context(mission_id)
+        if result.get('status') == 'success':
+            self._mission_cache[mission_id] = result
+        return result
         """Fetch mission details by ID.
         
         Args:
@@ -396,6 +499,7 @@ class MissionTools:
 ```
 
 ### 2. Create the Agent
+
 ```python
 class ChatAgent:
     def __init__(self, spy: Dict[str, Any]):
@@ -432,7 +536,7 @@ class ChatAgent:
 
 ## This is not RAG
 
-- **R**elational **A**nalysis **G**eneration (RAG): 
+- **R**elational **A**nalysis **G**eneration (RAG):
 - tokenizes the documents and stores them in a vector database
 - we are using the text as the context for the LLM
 
@@ -441,6 +545,7 @@ class ChatAgent:
 ## 3. Managing Conversations
 
 ### Message History
+
 ```python
 from pydantic_ai.messages import ModelMessage
 from typing import List, Optional
@@ -472,11 +577,13 @@ manager.add_message("conv1", ModelMessage(role="user", content="Hello!"))
 ```
 
 ### Context Windows
+
 - Keep conversation history manageable
 - Use rolling window for long conversations
 - Consider token limits for your model
 
 ### Exercise: Implement Message Persistence
+
 1. Extend `ConversationManager` to save messages to disk
 2. Add methods to load/save conversations
 3. Implement cleanup for old conversations
@@ -486,6 +593,7 @@ manager.add_message("conv1", ModelMessage(role="user", content="Hello!"))
 ## 4. Building the Chat Agent
 
 ### Complete Chat Endpoint
+
 ```python
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
@@ -541,6 +649,7 @@ async def chat(
 ```
 
 ### Error Handling
+
 - Handle rate limiting
 - Validate input
 - Manage conversation state
