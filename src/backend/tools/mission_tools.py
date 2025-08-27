@@ -1,6 +1,6 @@
 """Tools for mission-related operations."""
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from pathlib import Path
 from pydantic import BaseModel, Field
 

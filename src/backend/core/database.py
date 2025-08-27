@@ -1,8 +1,8 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from .models import Conversation
 
-from .models import Base
+# Import from our own models
+from ..models import Base
 
 # SQLite for simplicity
 DATABASE_URL = "sqlite:///./spy_chat.db"

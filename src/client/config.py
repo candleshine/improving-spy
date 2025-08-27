@@ -28,7 +28,7 @@ LOG_LEVEL = os.environ.get("SPY_LOG_LEVEL", "INFO")
 LOG_FILE = os.environ.get("SPY_LOG_FILE", "")  # Empty string means log to stdout only
 
 # Data directories
-DATA_DIR = os.path.join(os.path.expanduser("~"), ".spy_console")
+DATA_DIR = os.path.join(os.path.expanduser("."), ".spy_console")
 HISTORY_DIR = os.path.join(DATA_DIR, "history")
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(HISTORY_DIR, exist_ok=True)

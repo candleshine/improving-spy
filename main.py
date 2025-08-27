@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from src.api.routes import router
-from src.database import init_db
+from src.backend.api.routes import router
+from src.backend.core.database import init_db
 
 app = FastAPI(
     title="🕵️ Spy Agent Chat API", 

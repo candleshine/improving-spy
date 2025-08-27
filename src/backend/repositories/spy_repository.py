@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 from ..models import Spy
 import uuid
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any
 
 class SpyRepository:
     def __init__(self):

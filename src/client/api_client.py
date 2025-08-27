@@ -96,26 +96,8 @@ class SpyAPIClient:
             self.offline_mode = True
             return await self._generate_offline_response(spy_id, message)
     
-    async def debrief(self, spy_id: str, mission_id: str, message: str) -> Dict[str, Any]:
-        """
-        [Deprecated] Send a message in debrief mode.
-        
-        Note: It's recommended to use the chat() method with tool calls instead.
-        Example:
-            await client.chat(
-                spy_id=spy_id,
-                message="What happened during the mission?",
-                tool_calls=[{
-                    "name": "get_mission_context",
-                    "arguments": {"mission_id": mission_id}
-                }]
-            )
-        """
-        response = await self.client.post(
-            f"{self.base_url}/api/debrief/{spy_id}/{mission_id}",
-            json={"message": message}
-        )
-        return response.json()
+    # The debrief method has been removed as it's no longer part of the API
+    # Use the chat() method with tool calls instead for mission-related queries
     
     async def chat_with_history(
         self, 
@@ -137,6 +119,10 @@ class SpyAPIClient:
             
         Returns:
             Dict containing the response and any tool calls
+            
+        Raises:
+            httpx.HTTPStatusError: If the API returns an error status code
+            httpx.RequestError: If the request fails to be sent
         """
         try:
             payload = {"message": message}
@@ -154,13 +140,29 @@ class SpyAPIClient:
             self._cache_chat_response(spy_id, message, response_data, conversation_id)
             self.offline_mode = False
             return response_data
-        except (httpx.RequestError, httpx.HTTPStatusError) as e:
+        except httpx.HTTPStatusError as e:
+            error_msg = f"API error: {e.response.status_code} - {e.response.text}"
+            logging.error(error_msg)
+            raise
+        except httpx.RequestError as e:
             logging.warning(f"API unavailable, using offline mode: {str(e)}")
             self.offline_mode = True
             return await self._generate_offline_response(spy_id, message, conversation_id)
     
     async def connect_websocket(self, spy_id: str, conversation_id: Optional[str] = None) -> websockets.WebSocketClientProtocol:
-        """Connect to the WebSocket for real-time updates with auto-reconnect"""
+        """
+        Connect to the WebSocket for real-time chat updates with auto-reconnect.
+        
+        Args:
+            spy_id: ID of the spy to chat with
+            conversation_id: Optional conversation ID for continuing a conversation
+            
+        Returns:
+            WebSocket client connection
+            
+        Raises:
+            ConnectionError: If WebSocket connection fails after retries
+        """
         # Use the configured WebSocket base URL
         if conversation_id:
             ws_url = f"{config.WS_BASE_URL}/ws/chat/{spy_id}/conversation/{conversation_id}"
@@ -169,26 +171,44 @@ class SpyAPIClient:
         
         logging.info(f"Connecting to WebSocket: {ws_url}")
         
-        # Implement reconnection logic
+        # Implement reconnection logic with exponential backoff
         for attempt in range(self.ws_retry_attempts):
             try:
                 if attempt > 0:
-                    logging.info(f"Reconnection attempt {attempt+1}/{self.ws_retry_attempts}")
-                    await asyncio.sleep(self.ws_retry_delay)
-                    
-                self.ws = await websockets.connect(ws_url)
+                    backoff = min(self.ws_retry_delay * (2 ** (attempt - 1)), 30)  # Cap at 30 seconds
+                    logging.info(f"Reconnection attempt {attempt+1}/{self.ws_retry_attempts} in {backoff}s")
+                    await asyncio.sleep(backoff)
+                
+                # Add timeout to the WebSocket connection
+                self.ws = await asyncio.wait_for(
+                    websockets.connect(ws_url),
+                    timeout=10.0  # 10 second timeout for connection
+                )
+                
+                # Verify connection is alive
+                await asyncio.wait_for(self.ws.ping(), timeout=5.0)
+                
                 self.ws_connected = True
                 self.reconnect_attempts = 0
                 logging.info("WebSocket connection established")
                 return self.ws
                 
+            except asyncio.TimeoutError:
+                error_msg = f"WebSocket connection timed out (attempt {attempt+1}/{self.ws_retry_attempts})"
+                logging.error(error_msg)
+                if attempt == self.ws_retry_attempts - 1:  # Last attempt
+                    raise ConnectionError(error_msg)
+                    
             except Exception as e:
                 self.reconnect_attempts += 1
-                logging.error(f"WebSocket connection failed (attempt {attempt+1}/{self.ws_retry_attempts}): {str(e)}")
+                error_msg = f"WebSocket connection failed (attempt {attempt+1}/{self.ws_retry_attempts}): {str(e)}"
+                logging.error(error_msg, exc_info=True)
                 
-        logging.error(f"Failed to connect to WebSocket after {self.ws_retry_attempts} attempts")
-        self.ws_connected = False
-        raise ConnectionError(f"Failed to connect to WebSocket after {self.ws_retry_attempts} attempts")
+                if attempt == self.ws_retry_attempts - 1:  # Last attempt
+                    raise ConnectionError(f"Failed to connect to WebSocket after {self.ws_retry_attempts} attempts: {str(e)}")
+                
+        # This should theoretically never be reached due to the raise statements above
+        raise ConnectionError("Unexpected error in WebSocket connection")
     
     async def close(self):
         """Close all connections"""
@@ -257,36 +277,28 @@ class SpyAPIClient:
         return default
 
     async def _generate_offline_response(self, spy_id: str, message: str, 
-                                       conversation_id: Optional[str] = None, 
-                                       mission_id: Optional[str] = None) -> Dict[str, Any]:
+                                               conversation_id: Optional[str] = None) -> Dict[str, Any]:
         """Generate an offline response based on cached data"""
         # Notify that we're in offline mode
         offline_notice = "[OFFLINE MODE] "
         
         try:
-            # Determine if this is a chat or debrief
-            if mission_id:
-                # This is a debrief
-                response_text = f"{offline_notice}I'm operating in offline mode. Your mission debrief request has been saved and will be processed when connectivity is restored."
-                return {
-                    "response": response_text,
-                    "conversation_id": conversation_id or str(uuid.uuid4()),
-                    "offline": True
-                }
+            # Check for specific message types to provide more contextual responses
+            if "help" in message.lower() or "assist" in message.lower():
+                response_text = f"{offline_notice}I'm currently in offline mode due to connectivity issues. I can still help with basic information, but my capabilities are limited until connection is restored."
+            elif "status" in message.lower() or "connection" in message.lower():
+                response_text = f"{offline_notice}The application is currently in offline mode. Your messages are being cached locally and will be synchronized when connectivity is restored."
             else:
-                # This is a chat - try to provide a helpful response
-                if "help" in message.lower() or "assist" in message.lower():
-                    response_text = f"{offline_notice}I'm currently in offline mode due to connectivity issues. I can still help with basic information, but my capabilities are limited until connection is restored."
-                elif "status" in message.lower() or "connection" in message.lower():
-                    response_text = f"{offline_notice}The application is currently in offline mode. Your messages are being cached locally and will be synchronized when connectivity is restored."
-                else:
-                    response_text = f"{offline_notice}I've received your message but I'm currently operating in offline mode. Your request has been saved locally and will be processed when connectivity is restored."
-                
-                return {
-                    "response": response_text,
-                    "conversation_id": conversation_id or str(uuid.uuid4()),
-                    "offline": True
-                }
+                response_text = f"{offline_notice}I've received your message but I'm currently operating in offline mode. Your request has been saved locally and will be processed when connectivity is restored."
+            
+            return {
+                "spy_id": spy_id,
+                "spy_name": "Offline Assistant",
+                "message": message,
+                "response": response_text,
+                "conversation_id": conversation_id or str(uuid.uuid4()),
+                "offline": True
+            }
         except Exception as e:
             logging.error(f"Error generating offline response: {str(e)}", exc_info=True)
             return {

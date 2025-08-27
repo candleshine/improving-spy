@@ -1,17 +1,18 @@
+import json
+import logging
 from typing import Dict, Any, List, Optional, Union
+
 from fastapi import HTTPException
-from pydantic import BaseModel
 from pydantic_ai import Agent, Tool
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.ollama import OllamaProvider
-from .models import SpyProfile
-from .tools.mission_tools import MissionTools, MissionContextRequest
 
-class ToolResponse(BaseModel):
-    """Response model for tool calls."""
-    tool_call_id: str
-    name: str
-    content: Dict[str, Any]
+from ..models import SpyProfile
+from ..models.messages import UserMessage, ToolMessage, LLMResponse, LLMResponseWithTools
+from ..tools.mission_tools import MissionTools
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 class ChatAgent:
     """Agent that handles chat with tool calling support and mission context caching."""
@@ -58,16 +59,32 @@ class ChatAgent:
             
         Returns:
             Dict containing mission information
+            
+        Raises:
+            ValueError: If the mission ID is not specified or invalid
         """
+        if not mission_id or mission_id.lower() in ('not specified', 'none'):
+            raise ValueError("MISSION ID NOT SPECIFIED: USER DIDN'T MENTION A PARTICULAR MISSION ID, SO NO INFORMATION CAN BE RETRIEVED")
+            
         # Check cache first
         if mission_id in self._mission_cache:
             return self._mission_cache[mission_id]
             
-        # If not in cache, fetch and cache the result
-        result = MissionTools.get_mission_context(mission_id)
-        if result.get('status') == 'success':
-            self._mission_cache[mission_id] = result
-        return result
+        # If not in cache, load from file
+        try:
+            mission_tools = MissionTools()
+            mission_info = mission_tools.get_mission(mission_id)
+            
+            if not mission_info:
+                raise ValueError(f"Mission '{mission_id}' not found")
+                
+            # Cache the result
+            self._mission_cache[mission_id] = mission_info
+            return mission_info
+            
+        except Exception as e:
+            logger.error(f"Error getting mission context: {e}")
+            raise ValueError(f"Failed to retrieve mission context: {str(e)}")
         
     def _get_system_prompt(self) -> str:
         """The system prompt for the agent."""
@@ -123,33 +140,41 @@ You must yes-and the user's questions.  """
         message: str, 
         tool_calls: Optional[List[Dict]] = None,
         tool_outputs: Optional[List[Dict]] = None
-    ) -> Dict[str, Any]:
+    ) -> Union[LLMResponse, LLMResponseWithTools]:
         """
         Generate a response to a message, handling tool calls if needed.
         
         Args:
             message: The user's message
-            tool_calls: List of tool calls to process (not used in this implementation)
-            tool_outputs: Outputs from previous tool calls (not used in this implementation)
+            tool_calls: List of tool calls to process
+            tool_outputs: Outputs from previous tool calls
             
         Returns:
-            Dict containing the response and any tool calls
+            LLMResponse or LLMResponseWithTools containing the response and any tool calls
         """
         try:
-            # Use the agent's run method to generate a response
-            response = await self.ai.run(message)
+            # Prepare the user message
+            user_message = UserMessage(content=message)
             
-            # Convert the response to a string
+            # Handle tool outputs if any
+            if tool_outputs:
+                for output in tool_outputs:
+                    tool_msg = ToolMessage(
+                        content=json.dumps(output.get('output', {})),
+                        tool_call_id=output.get('tool_call_id', '')
+                    )
+                    await self.ai.run(tool_msg.model_dump_json())
+            
+            # Get the response from the model
+            response = await self.ai.run(user_message.model_dump_json())
+            
+            # Convert to our structured response format
             if hasattr(response, 'model_dump'):
                 response_dict = response.model_dump()
-                response_content = response_dict.get('content', str(response))
-            else:
-                response_content = str(response)
-                
-            return {
-                "response": response_content,
-                "tool_calls": []  # Tool calls are handled internally by pydantic-ai
-            }
+                return LLMResponseWithTools.from_dict(response_dict)
+            
+            # Fallback for non-dict responses
+            return LLMResponse(content=str(response).strip('"\''))
             
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"LLM call failed: {str(e)}")

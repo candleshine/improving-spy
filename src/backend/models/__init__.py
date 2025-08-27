@@ -1,10 +1,11 @@
-from sqlalchemy import Column, String, Text, JSON
+from sqlalchemy import Column, String, Text
 from sqlalchemy.ext.declarative import declarative_base
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 
 # SQLAlchemy ORM Base
 Base = declarative_base()
+__all__ = ['Spy', 'Conversation', 'SpyProfile', 'ToolCall', 'ToolCallResponse', 'ChatRequest', 'ChatResponse']
 
 # Database Model: Spy
 class Spy(Base):

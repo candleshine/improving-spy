@@ -1,17 +1,15 @@
 import logging
-from functools import lru_cache
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, WebSocket, WebSocketDisconnect, status, Header
-from pydantic_ai.messages import ModelMessage
 from sqlalchemy.orm import Session
 
-from ..agent import ChatAgent
-from ..database import get_db
+from ..services.agent import ChatAgent
+from ..core.database import get_db
 from ..models import ChatRequest, ChatResponse, SpyProfile
 from ..repositories.conversation_repository import ConversationRepository
 from ..repositories.spy_repository import SpyRepository
-from ..websocket_manager import manager
+from ..core.websocket_manager import manager
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -166,7 +164,24 @@ async def chat_with_conversation_history(
             logger.debug("Updating conversation history")
             # Store messages as simple dictionaries
             user_message = {"role": "user", "content": request.message}
-            assistant_message = {"role": "assistant", "content": result["response"]}
+            
+            # Handle both LLMResponse and LLMResponseWithTools
+            response_content = result.content
+            tool_calls = []
+            if hasattr(result, 'tool_calls'):
+                tool_calls = [
+                    {
+                        "id": call.id,
+                        "name": call.name,
+                        "arguments": call.arguments
+                    }
+                    for call in result.tool_calls
+                ]
+            
+            assistant_message = {"role": "assistant", "content": response_content}
+            if tool_calls:
+                assistant_message["tool_calls"] = tool_calls
+                
             messages.extend([user_message, assistant_message])
             conversation_repository.store_messages_sync(db, conversation_id, messages)
             
@@ -175,8 +190,8 @@ async def chat_with_conversation_history(
                 spy_id=spy_id,
                 spy_name=spy.name,
                 message=request.message,
-                response=result["response"],
-                tool_calls=result.get("tool_calls", []),
+                response=response_content,
+                tool_calls=tool_calls,
                 conversation_id=conversation_id
             )
             
@@ -303,7 +318,7 @@ async def websocket_chat_endpoint(websocket: WebSocket, spy_id: str, db: Session
             # Process the message
             user_message = data["message"]
             
-            # Convert spy object to dict for chat_with_agent
+            # Initialize the agent with spy data
             spy_data = {
                 "id": spy.id,
                 "name": spy.name,
@@ -311,7 +326,9 @@ async def websocket_chat_endpoint(websocket: WebSocket, spy_id: str, db: Session
                 "biography": spy.biography,
                 "specialty": spy.specialty
             }
-            response = chat_with_agent(user_message, spy_data)
+            agent = ChatAgent(spy_data)
+            result = await agent.chat(message=user_message)
+            response = result["response"]
             
             # Send response back
             await manager.send_personal_message(
@@ -385,7 +402,7 @@ async def websocket_conversation_endpoint(
             # Get message history
             messages = conversation_repository.get_message_history_sync(db, conversation_id)
             
-            # Convert spy to dict format
+            # Initialize the agent with spy data
             spy_data = {
                 "id": spy.id,
                 "name": spy.name,
@@ -393,13 +410,24 @@ async def websocket_conversation_endpoint(
                 "biography": spy.biography,
                 "specialty": spy.specialty
             }
+            agent = ChatAgent(spy_data)
             
-            # Use the new chat_with_context signature
-            response = chat_with_context(user_message, spy_data, messages)
+            # Convert messages to the format expected by the agent
+            chat_messages = [
+                {"role": msg.get("role", "user"), "content": msg.get("content", "")} 
+                for msg in messages
+            ]
+            
+            # Get the response from the agent
+            result = await agent.chat(
+                message=user_message,
+                messages=chat_messages
+            )
+            response = result["response"]
             
             # Store the updated conversation
-            messages.append(ModelMessage(role="user", content=user_message))
-            messages.append(ModelMessage(role="assistant", content=response))
+            messages.append({"role": "user", "content": user_message})
+            messages.append({"role": "assistant", "content": response})
             conversation_repository.store_messages_sync(db, conversation_id, messages)
             
             # Send response back

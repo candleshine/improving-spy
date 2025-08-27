@@ -13,7 +13,8 @@ from textual.reactive import reactive
 from textual.worker import Worker, get_current_worker
 
 from .api_client import SpyAPIClient
-from .widgets import SpySelector, ChatWindow, InputBar
+from .widgets.spy_selector import SpySelector
+from .widgets import ChatWindow, InputBar
 from .history_manager import HistoryManager
 from . import config as config
 
@@ -41,7 +42,6 @@ class SpyCommandConsole(App):
         ("ctrl+q", "quit", "Quit"),
         ("ctrl+s", "submit_message", "Send Message"),
         ("ctrl+c", "clear_input", "Clear Input"),
-        ("ctrl+r", "toggle_chat_mode", "Toggle Chat/Debrief"),
         ("ctrl+h", "show_history", "History"),
         ("ctrl+o", "save_conversation", "Save"),
         ("f1", "show_help", "Help"),
@@ -107,6 +107,11 @@ class SpyCommandConsole(App):
     #input-container {
         height: 3;
         margin-top: 1;
+        display: none;  /* Start hidden */
+    }
+    
+    #input-container.visible {
+        display: block;  /* Show when visible class is added */
     }
     
     #message-input {
@@ -164,8 +169,6 @@ class SpyCommandConsole(App):
     # Reactive attributes
     selected_spy = reactive(None)
     conversation_id = reactive(None)
-    mission_id = reactive(None)
-    chat_mode = reactive("chat")  # "chat" or "debrief"
     
     def __init__(self):
         super().__init__()
@@ -209,27 +212,19 @@ class SpyCommandConsole(App):
         main_container = self.query_one("#main-container")
         
         # Spy selector
-        spy_selector = SpySelector(self.spies, self.on_spy_selected)
+        spy_selector = SpySelector(self.spies, self.on_spy_selected, id="spy-selector")
         main_container.mount(spy_selector)
+        logger.debug(f"Mounted SpySelector with ID: {spy_selector.id}")
             
-        # Mode selector
-        mode_selector = Container(id="mode-selector")
-        main_container.mount(mode_selector)
+        # Add a welcome message to the sidebar
+        welcome = Static("\nWelcome to Spy Chat\n", classes="section-title")
+        sidebar = Container(id="sidebar")
+        main_container.mount(sidebar)
+        sidebar.mount(welcome)
         
-        # Add components to mode selector
-        mode_selector.mount(Label("MODE:", classes="mode-title"))
-        
-        chat_mode = RadioSet(id="chat-mode")
-        mode_selector.mount(chat_mode)
-        
-        chat_mode.mount(RadioButton("Chat", value=True))
-        chat_mode.mount(RadioButton("Debrief"))
-        
-        # Mission ID input (hidden by default)
-        mode_selector.mount(Static("Enter mission ID:", id="mission-label", classes="mode-title"))
-        mission_input = InputBar(self.on_mission_submitted)
-        mission_input.id = "mission-input"
-        mode_selector.mount(mission_input)
+        # Add connection status
+        self.connection_status = Static("Status: Connecting...", id="connection-status")
+        sidebar.mount(self.connection_status)
         
         # Chat container (initially hidden)
         main_container.mount(Container(id="chat-container"))
@@ -241,54 +236,83 @@ class SpyCommandConsole(App):
         message_input.id = "message-input"
         input_container.mount(message_input)
     
-    def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
-        """Handle mode selection"""
-        if event.radio_set.id == "chat-mode":
-            selected_index = event.value
-            self.chat_mode = "chat" if selected_index == 0 else "debrief"
-            
-            # Show/hide mission input
-            mission_label = self.query_one("#mission-label")
-            mission_input = self.query_one("#mission-input")
-            
-            if self.chat_mode == "debrief":
-                mission_label.add_class("visible")
-                mission_input.add_class("visible")
-            else:
-                mission_label.remove_class("visible")
-                mission_input.remove_class("visible")
+    async def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
+        """Handle radio set changes"""
+        # This method is kept for compatibility but mode switching is removed
+        pass
     
-    def on_spy_selected(self, spy_data: Dict[str, Any]) -> None:
+    async def on_spy_selected(self, spy_data: Dict[str, Any]) -> None:
         """Handle spy selection"""
-        print(f"ON_SPY_SELECTED CALLED WITH SPY_DATA: {spy_data}")
-        logger.debug(f"on_spy_selected called with spy_data: {spy_data}")
+        logger.debug(f"on_spy_selected called with spy: {spy_data}")
+        self.selected_spy = spy_data
+        logger.info(f"Selected spy: {spy_data['name']}")
         
         try:
-            print("SETTING SELECTED_SPY AND RESETTING CONVERSATION")
-            self.selected_spy = spy_data
-            self.conversation_id = None  # Reset conversation ID
-            self.messages = []  # Reset message history
-            logger.info(f"Spy selected: {spy_data['name']} ({spy_data['codename']})")
+            # Remove the spy selector if it exists
+            try:
+                spy_selector = self.query_one("#spy-selector")
+                if spy_selector:
+                    logger.debug("Removing spy selector")
+                    await spy_selector.remove()
+                    logger.debug("Successfully removed spy selector")
+            except Exception as e:
+                logger.error(f"Error removing spy selector: {e}", exc_info=True)
             
-            # Create chat window
-            print("ATTEMPTING TO FIND CHAT CONTAINER")
-            logger.debug("Attempting to find chat container")
-            chat_container = self.query_one("#chat-container")
-            print(f"FOUND CHAT CONTAINER: {chat_container}")
-            logger.debug(f"Found chat container: {chat_container}")
+            # Get or create chat container
+            try:
+                chat_container = self.query_one("#chat-container")
+                if not chat_container:
+                    logger.debug("Chat container not found, creating one")
+                    main_container = self.query_one("#main-container")
+                    if not main_container:
+                        raise RuntimeError("Main container not found")
+                    chat_container = Container(id="chat-container")
+                    main_container.mount(chat_container)
+                    await self.refresh_layout()
+                    logger.debug("Created and mounted chat container")
+                else:
+                    # Clear existing chat UI if any
+                    logger.debug("Clearing existing chat UI")
+                    await chat_container.remove_children()
+                    await self.refresh_layout()
+                    logger.debug("Cleared chat container")
+                
+                # Initialize chat UI
+                logger.debug("Setting up chat UI")
+                self.setup_chat_ui()
+                
+                # Connect to WebSocket in the background
+                logger.debug("Starting WebSocket connection")
+                self.run_worker(self.connect_websocket())
+                
+            except Exception as e:
+                logger.error(f"Error setting up chat UI: {e}", exc_info=True)
+                raise
+                
+        except Exception as e:
+            error_msg = f"Error in on_spy_selected: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            self.notify(error_msg, severity="error")
             
-            print("REMOVING EXISTING CHILDREN FROM CHAT CONTAINER")
-            logger.debug("Removing existing children from chat container")
-            chat_container.remove_children()
-            
-            # Get avatar from codename
-            print("CREATING CHAT WINDOW")
-            logger.debug("Creating chat window")
-            abbrev = "".join([word[0] for word in spy_data["codename"].split() if word])
-            chat_window = ChatWindow(spy_data["name"], abbrev)
-            print(f"MOUNTING CHAT WINDOW WITH SPY NAME: {spy_data['name']} AND AVATAR: {abbrev}")
-            logger.debug(f"Mounting chat window with spy name: {spy_data['name']} and avatar: {abbrev}")
-            chat_container.mount(chat_window)
+            # Fallback UI in case of error
+            try:
+                logger.debug("Attempting fallback UI creation")
+                chat_container = self.query_one("#chat-container")
+                if not chat_container:
+                    main_container = self.query_one("#main-container")
+                    if main_container:
+                        chat_container = Container(id="chat-container")
+                        main_container.mount(chat_container)
+                
+                if chat_container:
+                    abbrev = "".join([word[0] for word in spy_data["codename"].split() if word])
+                    chat_window = ChatWindow(spy_data["name"], abbrev)
+                    logger.debug(f"Mounting fallback chat window for {spy_data['name']}")
+                    chat_container.mount(chat_window)
+                    await self.refresh_layout()
+            except Exception as fallback_error:
+                logger.error(f"Error in fallback UI: {fallback_error}", exc_info=True)
+                self.notify("Failed to initialize chat interface", severity="error")
             
             # Add welcome message
             welcome_msg = f"I'm {spy_data['name']}, codename {spy_data['codename']}. How can I assist you?"
@@ -338,193 +362,60 @@ class SpyCommandConsole(App):
         import sys
         sys.stdout.flush()
     
-    async def on_mission_submitted(self, mission_id: str) -> None:
-        """Handle mission ID submission"""
-        if not mission_id:
-            return
-            
-        self.mission_id = mission_id
-        
-        # Create a new conversation
-        try:
-            response = await self.api_client.create_conversation(self.selected_spy["id"])
-            self.conversation_id = response.get("conversation_id")
-            
-            # Connect to WebSocket
-            await self.connect_websocket()
-            
-            # Show system message
-            chat_window = self.query_one(ChatWindow)
-            chat_window.add_message(f"Mission context loaded: {mission_id}", is_user=False)
-            
-            # Hide mission input
-            mission_input = self.query_one("#mission-input")
-            mission_input.remove_class("visible")
-            
-            # Focus message input
-            self.query_one("#message-input").focus()
-        except Exception as e:
-            self.show_error(f"Error loading mission: {str(e)}")
-    
     async def on_message_submitted(self, message: str) -> None:
-        """Handle message submission"""
-        if not message or not self.selected_spy:
+        """Handle sending and receiving messages"""
+        if not message.strip() or not self.selected_spy:
             return
             
-        # Special command to quit
-        if message.lower() == ":quit":
-            logger.info("Quit command received")
-            self.exit()
-            return
-            
-        # Check if we're waiting for history selection
-        if hasattr(self, '_awaiting_history_selection') and self._awaiting_history_selection:
-            try:
-                selection = int(message.strip())
-                if 1 <= selection <= len(self._history_conversations):
-                    # Get the selected conversation
-                    conv = self._history_conversations[selection - 1]
-                    filepath = conv['filepath']
-                    logger.info(f"Loading conversation from {filepath}")
-                    await self._load_conversation(filepath)
-                else:
-                    self.show_error(f"Invalid selection: {message}")
-            except ValueError:
-                self.show_error(f"Please enter a number between 1 and {len(self._history_conversations)}")
-            except Exception as e:
-                error_msg = f"Error loading conversation: {str(e)}"
-                logger.error(error_msg, exc_info=True)
-                self.show_error(error_msg)
-                
-            # Reset flag
-            self._awaiting_history_selection = False
-            return
-            
+        spy_id = self.selected_spy["id"]
+        
         # Add user message to chat
         chat_window = self.query_one(ChatWindow)
         chat_window.add_message(message, is_user=True)
         
-        # Add user message to history
-        self.messages.append({
-            "role": "user",
-            "content": message,
-            "timestamp": datetime.now().isoformat()
-        })
-        
-        # Show typing indicator
-        chat_window.show_typing()
-        
-        # Send message to API
         try:
-            spy_id = self.selected_spy["id"]
-            spy_name = self.selected_spy["name"]
-            logger.info(f"Sending message to {spy_name}", 
-                        mode=self.chat_mode, 
-                        message_length=len(message))
+            # Get the input widget and clear it
+            input_widget = self.query_one("#message-input", InputBar)
+            input_widget.value = ""
             
-            if self.chat_mode == "chat":
-                if self.conversation_id:
-                    logger.debug(f"Using existing conversation: {self.conversation_id}")
-                    response = await self.api_client.chat_with_history(
-                        spy_id, 
-                        self.conversation_id, 
-                        message
-                    )
-                else:
+            # Show typing indicator
+            chat_window.show_typing()
+            
+            # Update connection status
+            status = self.query_one("#connection-status")
+            status.update("Status: Sending message...")
+            
+            try:
+                # Always use chat with conversation history
+                if not self.conversation_id:
+                    # Start a new conversation
                     logger.debug("Starting new conversation")
-                    response = await self.api_client.chat(spy_id, message)
-                    self.conversation_id = response.get("conversation_id")
+                    conv = await self.api_client.create_conversation(spy_id)
+                    self.conversation_id = conv.get("conversation_id")
                     logger.info(f"New conversation created: {self.conversation_id}")
-            else:  # debrief mode
-                logger.debug(f"Debriefing mission: {self.mission_id}")
-                response = await self.api_client.debrief(
-                    spy_id, 
-                    self.mission_id, 
-                    message
-                )
-                self.conversation_id = response.get("conversation_id")
                 
-            # Hide typing indicator and add response
-            chat_window.hide_typing()
-            chat_window.add_message(response["response"], is_user=False)
-            logger.debug(f"Received response of length {len(response['response'])}")
-            
-            # Add assistant response to history
-            self.messages.append({
-                "role": "assistant",
-                "content": response["response"],
-                "timestamp": datetime.now().isoformat()
-            })
-            
-            # Connect to WebSocket if not already connected
-            if not self.ws_worker or self.ws_worker.is_finished:
-                await self.connect_websocket()
+                # Send the message
+                response = await self.api_client.chat_with_history(
+                    spy_id=spy_id,
+                    conversation_id=self.conversation_id,
+                    message=message
+                )
+                
+                # Process the response
+                chat_window.add_message(response["response"], is_user=False)
+                status.update("Status: Connected")
+                
+            except Exception as e:
+                status.update("Status: Error (see chat)")
+                raise
                 
         except Exception as e:
             error_msg = f"Error sending message: {str(e)}"
             logger.error(error_msg, exc_info=True)
+            chat_window.add_message(error_msg, is_user=False)
+        finally:
+            # Always remove typing indicator
             chat_window.hide_typing()
-            self.show_error(error_msg)
-    
-    async def connect_websocket(self) -> None:
-        """Connect to WebSocket for real-time updates"""
-        if self.ws_worker and not self.ws_worker.is_finished:
-            return
-            
-        # Start WebSocket worker
-        self.ws_worker = self.run_worker(
-            self.websocket_handler(
-                self.selected_spy["id"], 
-                self.conversation_id
-            )
-        )
-    
-    async def websocket_handler(self, spy_id: str, conversation_id: Optional[str] = None) -> None:
-        """Handle WebSocket connection and messages"""
-        try:
-            # Connect to WebSocket
-            ws = await self.api_client.connect_websocket(spy_id, conversation_id)
-            
-            # Process messages
-            async for message in ws:
-                try:
-                    data = json.loads(message)
-                    message_type = data.get("type")
-                    
-                    if message_type == "typing":
-                        # Show typing indicator
-                        chat_window = self.query_one(ChatWindow)
-                        chat_window.show_typing()
-                    elif message_type == "response":
-                        # Hide typing indicator and add response
-                        chat_window = self.query_one(ChatWindow)
-                        chat_window.hide_typing()
-                        chat_window.add_message(data["response"], is_user=False)
-                    elif message_type == "system":
-                        # Show system message
-                        self.show_system_message(data["content"])
-                    elif message_type == "error":
-                        # Show error message
-                        self.show_error(data["content"])
-                except Exception as e:
-                    self.show_error(f"Error processing WebSocket message: {str(e)}")
-                    
-        except Exception as e:
-            self.show_error(f"WebSocket error: {str(e)}")
-    
-    def show_system_message(self, message: str) -> None:
-        """Show a system message"""
-        chat_window = self.query_one(ChatWindow)
-        system_message = Static(message, classes="system-message")
-        chat_window.mount(system_message)
-        chat_window.scroll_end(animate=False)
-    
-    def show_error(self, message: str) -> None:
-        """Show an error message"""
-        chat_window = self.query_one(ChatWindow)
-        error_message = Static(message, classes="error-message")
-        chat_window.mount(error_message)
-        chat_window.scroll_end(animate=False)
     
     async def action_quit(self) -> None:
         """Quit the application"""
@@ -535,20 +426,21 @@ class SpyCommandConsole(App):
         
     def action_select_focused_spy(self) -> None:
         """Select the currently focused spy"""
-        print("ENTER KEY PRESSED IN MAIN APP")
         logger.debug("Enter key pressed in main app")
-        
-        # If we're in the spy selection phase, find the focused button
         if not self.selected_spy:
             try:
+                logger.debug("No spy selected yet, looking for spy selector")
                 spy_selector = self.query_one("#spy-selector")
+                logger.debug(f"Found spy selector: {spy_selector}")
+                
                 if hasattr(spy_selector, "action_select_focused"):
-                    print("DELEGATING TO SPY SELECTOR'S ACTION_SELECT_FOCUSED")
-                    logger.debug("Delegating to spy selector's action_select_focused")
+                    logger.debug("Calling action_select_focused on spy selector")
                     spy_selector.action_select_focused()
                 else:
-                    print("SPY SELECTOR DOESN'T HAVE ACTION_SELECT_FOCUSED METHOD")
                     logger.warning("SpySelector doesn't have action_select_focused method")
+                    print("SPY SELECTOR DOESN'T HAVE ACTION_SELECT_FOCUSED METHOD")
+                    # Log all methods available on spy_selector
+                    logger.debug(f"Available methods: {[m for m in dir(spy_selector) if not m.startswith('_')]}")
             except Exception as e:
                 print(f"ERROR IN ACTION_SELECT_FOCUSED_SPY: {str(e)}")
                 logger.error(f"Error in action_select_focused_spy: {str(e)}", exc_info=True)
@@ -573,23 +465,17 @@ class SpyCommandConsole(App):
             logger.debug("Input field cleared via keyboard shortcut")
             
     def action_toggle_chat_mode(self) -> None:
-        """Toggle between chat and debrief modes"""
-        if self.chat_mode == "chat":
-            self.chat_mode = "debrief"
-            logger.info("Switched to debrief mode")
-        else:
-            self.chat_mode = "chat"
-            logger.info("Switched to chat mode")
+        """This method is kept for key binding compatibility but does nothing"""
+        logger.debug("Chat mode toggle is no longer supported")
             
     def action_show_help(self) -> None:
         """Show help information"""
         help_text = """
-        Spy Command Console - Keyboard Shortcuts
-        
+        Keyboard Shortcuts:
+        -----------------
         Ctrl+Q: Quit the application
         Ctrl+S: Send the current message
         Ctrl+C: Clear the input field
-        Ctrl+R: Toggle between chat and debrief modes
         Ctrl+H: Show conversation history
         Ctrl+O: Save current conversation
         F1: Show this help information

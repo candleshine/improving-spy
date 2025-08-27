@@ -9,9 +9,8 @@ import os
 # Add the project root to the Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Import and run the CLI
-from src.client.spy_cli import SpyCommandConsole
+# Import and run the application
+from src.client.app import run_app
 
 if __name__ == "__main__":
-    app = SpyCommandConsole()
-    app.run()
+    run_app()

@@ -197,3 +197,11 @@ class ChatWindow(ScrollableContainer):
         if self.typing_indicator:
             self.typing_indicator.remove()
             self.typing_indicator = None
+            
+    def clear(self) -> None:
+        """Clear all messages from the chat window"""
+        # Remove all child widgets except the title
+        for child in self.query():
+            if child != self.query_one(".section-title"):
+                child.remove()
+        self.typing_indicator = None
