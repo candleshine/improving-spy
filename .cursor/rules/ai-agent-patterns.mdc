@@ -1,0 +1,66 @@
+---
+description: Use this rule when working with AI agent functionality, implementing tools, designing system prompts, or integrating with Ollama. Essential for maintaining consistency in AI agent behavior and tool implementation.
+globs: src/backend/services/*.py,src/backend/tools/*.py
+---
+
+# AI Agent Development Patterns
+
+## Pydantic AI Integration
+- Use the `Agent` class from `pydantic_ai` for creating AI-powered spies
+- Implement tools using the `Tool` class with clear descriptions and function signatures
+- Use `OllamaProvider` for local LLM integration (default: `http://localhost:11434/v1`)
+
+## System Prompt Design
+- Keep system prompts focused on the spy's personality and capabilities
+- Include codename, biography, and specialty in the prompt
+- Use clear, concise language that guides the AI's behavior
+- Avoid overly complex instructions that might confuse the model
+
+## Tool Calling Strategy
+- **Sparingly**: Only use tools when explicitly requested by the user
+- **Mission Context**: Implement `get_mission_context` tool for mission-specific information
+- **Clear Descriptions**: Provide detailed tool descriptions that explain when and how to use them
+- **Error Handling**: Always handle tool call failures gracefully
+
+## Mission Context Management
+- Store mission files in the [missions/](mdc:missions/) directory
+- Use descriptive filenames (e.g., `paris.txt` for Paris mission)
+- Implement proper file reading with encoding handling
+- Provide meaningful error messages when missions aren't found
+
+## Agent Initialization Pattern
+```python
+def __init__(self, spy: Dict[str, Any]):
+    self.spy = spy
+    model = OpenAIModel('llama3.2', provider=OllamaProvider(...))
+    self.ai = Agent(
+        model=model,
+        system_prompt=self._get_system_prompt(),
+        tools=[...]
+    )
+```
+
+## Tool Implementation Best Practices
+- Use type hints for all tool parameters
+- Implement proper validation for tool inputs
+- Return structured, meaningful responses
+- Log tool usage for debugging purposes
+- Handle exceptions gracefully with informative error messages
+
+## Spy Profile Integration
+- Extract spy attributes safely using helper methods
+- Support both dictionary and object access patterns
+- Provide sensible defaults for missing attributes
+- Maintain consistency between different spy profiles
+
+## Logging and Debugging
+- Use structured logging for AI interactions
+- Log tool calls and responses for debugging
+- Include context information in log messages
+- Use appropriate log levels (DEBUG, INFO, ERROR)
+
+## Performance Considerations
+- Cache mission context when appropriate
+- Avoid unnecessary tool calls
+- Use efficient data structures for spy profiles
+- Monitor response times for AI interactions

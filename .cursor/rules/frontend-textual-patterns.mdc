@@ -1,0 +1,66 @@
+---
+description: Use this rule when developing the Textual-based CLI frontend, creating widgets, managing screens, or implementing user interactions. Essential for maintaining consistent frontend architecture and user experience.
+globs: src/client/*.py,src/client/widgets/*.py,src/client/screens/*.py
+---
+
+# Textual Frontend Development Patterns
+
+## Textual Framework Usage
+- Use Textual 5.3.0+ for the CLI interface
+- Implement proper screen management and navigation
+- Use CSS-like styling with `.tcss` files
+- Follow Textual's widget composition patterns
+
+## Widget Architecture
+- **Chat Window**: [chat_window.py](mdc:src/client/widgets/chat_window.py) - Main conversation interface
+- **Input Bar**: [input_bar.py](mdc:src/client/widgets/input_bar.py) - User input handling with validation
+- **Spy Selector**: [spy_selector.py](mdc:src/client/widgets/spy_selector.py) - Agent selection interface
+- **Typing Indicator**: [typing_indicator.py](mdc:src/client/widgets/typing_indicator.py) - Visual feedback
+
+## Screen Management
+- Use [screens/main.py](mdc:src/client/screens/main.py) for the primary application screen
+- Implement proper screen transitions and navigation
+- Handle screen state management appropriately
+- Use Textual's built-in screen lifecycle methods
+
+## API Integration
+- Use [api_client.py](mdc:src/client/api_client.py) for backend communication
+- Implement proper error handling for API calls
+- Use async/await patterns for non-blocking operations
+- Handle connection failures gracefully
+
+## Styling and Theming
+- Use [styles/spy_console.tcss](mdc:styles/spy_console.tcss) for consistent styling
+- Follow the spy agency theme with appropriate colors and fonts
+- Use CSS classes for reusable styling patterns
+- Implement responsive design for different terminal sizes
+
+## Event Handling
+- Implement proper event handlers for user interactions
+- Use Textual's event system for communication between widgets
+- Handle keyboard shortcuts and navigation
+- Implement proper input validation and feedback
+
+## State Management
+- Use [history_manager.py](mdc:src/client/history_manager.py) for conversation persistence
+- Implement proper state synchronization between widgets
+- Handle application state changes gracefully
+- Use Textual's reactive attributes when appropriate
+
+## Configuration
+- Use [config.py](mdc:src/client/config.py) for application settings
+- Implement environment-based configuration
+- Handle configuration validation and defaults
+- Use configuration for API endpoints and connection settings
+
+## Testing Frontend Components
+- Write tests in [tests/client/](mdc:tests/client/) directory
+- Test widget interactions and state changes
+- Mock API calls for isolated testing
+- Test different screen configurations and layouts
+
+## Performance Considerations
+- Implement efficient widget updates
+- Use Textual's built-in optimization features
+- Avoid blocking operations in the UI thread
+- Implement proper cleanup for long-running operations
