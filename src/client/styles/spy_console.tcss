@@ -1,0 +1,91 @@
+/* Main screen styling */
+Screen {
+    background: #000000;
+    color: #00ff00;
+}
+
+/* Section title styling */
+.section-title {
+    background: #003300;
+    color: #00ff00;
+    padding: 1;
+    text-align: center;
+    width: 100%;
+}
+
+/* Spy name styling */
+.spy-name {
+    background: #003300;
+    color: #00ff00;
+    width: 100%;
+    text-align: left;
+    padding: 0 1;
+}
+
+.spy-name.selected {
+    background: #00aa00;
+    color: #000000;
+    text-style: bold;
+}
+
+/* Spy selector */
+#spy-selector {
+    height: auto;
+    margin: 1 0;
+    border: solid green;
+}
+
+/* Spy list */
+.spy-list {
+    height: auto;
+    border: none;
+}
+
+/* Spy avatar */
+.spy-avatar {
+    background: #003300;
+    color: white;
+    min-width: 4;
+    text-align: center;
+    margin-right: 1;
+}
+
+/* Chat window */
+#chat-window {
+    height: 1fr;
+    border: solid green;
+    margin: 1 0;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+/* Input bar */
+#input-bar {
+    height: auto;
+    border: solid green;
+    padding: 1;
+}
+
+/* Message styling */
+.message {
+    margin: 1 0;
+    padding: 0 1;
+}
+
+.message.user {
+    text-align: right;
+    color: #00ff00;
+}
+
+.message.assistant {
+    text-align: left;
+    color: #00aaff;
+}
+
+/* Status bar */
+.status-bar {
+    background: #003300;
+    color: #00ff00;
+    height: 1;
+    padding: 0 1;
+}

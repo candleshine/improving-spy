@@ -1,0 +1,48 @@
+### Create a test spy
+POST http://localhost:8000/api/spies/
+Content-Type: application/json
+
+{
+  "name": "James Bond",
+  "codename": "007",
+  "biography": "British Secret Service agent with a license to kill. Specializes in espionage, combat, and high-stakes missions.",
+  "specialty": "Espionage, combat, seduction"
+}
+
+###
+POST http://localhost:8000/api/spies/
+Content-Type: application/json  
+
+{
+  "name": "Brian O'Neal",
+  "codename": "Sunshine",
+  "biography": "British Secret Service agent with a license to kill. Specializes in espionage, combat, and high-stakes missions.",
+  "specialty": "Espionage, combat, seduction"
+}
+
+### 
+# Create a second spy for testing
+POST http://localhost:8000/api/spies/
+Content-Type: application/json
+
+{
+  "name": "Simon Templar",
+  "codename": "Shadow Viper",
+  "biography": "British Secret Service agent with a license to kill. Specializes in deep cover operations, combat, and high-stakes missions. Quick witted",
+  "specialty": "Culinary arts, espionage, combat"
+}
+
+### Get the list of spies
+# @name listSpies
+GET http://localhost:8000/api/spies/
+Accept: application/json
+
+### Get the ID of the last spy in the list
+# Run this after the listSpies request
+# @name getFirstSpyId
+@spy_id = {{listSpies.response.body.0.id}}
+
+### Delete the last spy
+# Run this after getLastSpyId
+DELETE http://localhost:8000/api/spies/{{spy_id}}
+Accept: application/json

@@ -1,0 +1,27 @@
+### Chat with a spy using codename
+# @name getSpies
+GET http://localhost:8000/api/spies/
+Accept: application/json
+
+### 
+@spy_id = {{getSpies.response.body.$[0].id}}
+@spy_codename = {{getSpies.response.body.$[0].codename}}
+
+### Chat with a spy using codename
+# @name chatWithSpy
+POST http://localhost:8000/api/chat/007
+Content-Type: application/json
+
+{
+  "message": "What's your name and specialty?"
+}
+
+### 
+# Chat with a spy using ID (alternative)
+# @name chatWithSpyById
+POST http://localhost:8000/api/chat/{{spy_id}}
+Content-Type: application/json
+
+{
+  "message": "Do you know the rules to baccarat?"
+}
