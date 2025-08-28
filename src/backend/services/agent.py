@@ -8,7 +8,7 @@ from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.ollama import OllamaProvider
 
 from ..models import SpyProfile
-from ..models.messages import UserMessage, ToolMessage, LLMResponse, LLMResponseWithTools
+from ..models.messages import ChatResponse
 from ..tools.mission_tools import MissionTools
 
 # Set up logging
@@ -41,9 +41,10 @@ class ChatAgent:
             function=self._get_mission_context
         )
         
-        # Initialize the agent with tools
+        # Initialize the agent with tools and structured response type
         self.ai = Agent(
-            model,
+            model=model,
+            output_type=ChatResponse,
             system_prompt=self._get_system_prompt(),
             tools=[mission_tool]
         )
@@ -137,10 +138,8 @@ You must yes-and the user's questions.  """
     
     async def chat(
         self, 
-        message: str, 
-        tool_calls: Optional[List[Dict]] = None,
-        tool_outputs: Optional[List[Dict]] = None
-    ) -> Union[LLMResponse, LLMResponseWithTools]:
+        message: str
+    ) -> ChatResponse:
         """
         Generate a response to a message, handling tool calls if needed.
         
@@ -150,32 +149,17 @@ You must yes-and the user's questions.  """
             tool_outputs: Outputs from previous tool calls
             
         Returns:
-            LLMResponse or LLMResponseWithTools containing the response and any tool calls
+            ChatResponse containing the structured response
         """
         try:
-            # Prepare the user message
-            user_message = UserMessage(content=message)
-            
-            # Handle tool outputs if any
-            if tool_outputs:
-                for output in tool_outputs:
-                    tool_msg = ToolMessage(
-                        content=json.dumps(output.get('output', {})),
-                        tool_call_id=output.get('tool_call_id', '')
-                    )
-                    await self.ai.run(tool_msg.model_dump_json())
-            
             # Get the response from the model
-            response = await self.ai.run(user_message.model_dump_json())
-            
-            # Convert to our structured response format
-            if hasattr(response, 'model_dump'):
-                response_dict = response.model_dump()
-                return LLMResponseWithTools.from_dict(response_dict)
-            
-            # Fallback for non-dict responses
-            return LLMResponse(content=str(response).strip('"\''))
-            
+            response = await self.ai.run_async(
+                message
+            )
+        
+            # The response is already a ChatResponse instance
+            return response
+        
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"LLM call failed: {str(e)}")
 

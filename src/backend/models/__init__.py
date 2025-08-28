@@ -5,10 +5,10 @@ from typing import Optional, List, Dict, Any
 
 # SQLAlchemy ORM Base
 Base = declarative_base()
-__all__ = ['Spy', 'Conversation', 'SpyProfile', 'ToolCall', 'ToolCallResponse', 'ChatRequest', 'ChatResponse']
+__all__ = ['Spy', 'SpyBase', 'SpyCreate', 'SpyModel', 'Conversation', 'SpyProfile', 'ToolCall', 'ToolCallResponse', 'ChatRequest', 'ChatResponse']
 
-# Database Model: Spy
-class Spy(Base):
+# Database Model: Spy (SQLAlchemy)
+class SpyModel(Base):
     __tablename__ = "spies"
 
     id = Column(String, primary_key=True)
@@ -27,6 +27,25 @@ class Conversation(Base):
     mission_id = Column(String, nullable=True)
 
 # Pydantic Models (for API)
+class SpyBase(BaseModel):
+    """Base Pydantic model for Spy with common fields"""
+    name: str
+    codename: str
+    biography: str
+    specialty: str
+
+class SpyCreate(SpyBase):
+    """Pydantic model for creating a new spy"""
+    pass
+
+class Spy(SpyBase):
+    """Pydantic model for Spy responses"""
+    id: str
+
+    class Config:
+        orm_mode = True
+        from_attributes = True
+
 class SpyProfile(BaseModel):
     id: str
     name: str

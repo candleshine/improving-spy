@@ -2,51 +2,71 @@ from fastcrud import FastCRUD
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from ..models import Spy
+from ..models import Spy, SpyModel, SpyCreate
 import uuid
 from typing import Optional, List, Dict, Any
 
 class SpyRepository:
     def __init__(self):
-        self.crud = FastCRUD(model=Spy)
+        self.crud = FastCRUD(model=SpyModel)
     
     # Standard CRUD operations via FastCRUD
     async def get(self, session: AsyncSession, spy_id: str) -> Optional[Spy]:
         """Get a spy by ID asynchronously."""
-        return await self.crud.get(session, id=spy_id)
+        result = await self.crud.get(session, id=spy_id)
+        if result:
+            return Spy.from_orm(result)
+        return None
         
     async def create(self, session: AsyncSession, data: Dict[str, Any]) -> Spy:
         """Create a new spy asynchronously."""
         if "id" not in data:
             data["id"] = str(uuid.uuid4())
-        return await self.crud.create(session, data)
+        db_spy = await self.crud.create(session, data)
+        return Spy.from_orm(db_spy)
     
     async def list(self, session: AsyncSession, skip: int = 0, limit: int = 100) -> List[Spy]:
         """List all spies with pagination asynchronously."""
-        return await self.crud.get_multi(session, skip=skip, limit=limit)
+        result = await self.crud.get_multi(session, skip=skip, limit=limit)
+        return [Spy.from_orm(spy) for spy in result]
     
     async def update(self, session: AsyncSession, spy_id: str, data: Dict[str, Any]) -> Optional[Spy]:
         """Update a spy asynchronously."""
-        return await self.crud.update(session, id=spy_id, obj_in=data)
+        result = await self.crud.update(session, id=spy_id, obj_in=data)
+        if result:
+            return Spy.from_orm(result)
+        return None
     
     async def delete(self, session: AsyncSession, spy_id: str) -> Optional[Spy]:
         """Delete a spy asynchronously."""
-        return await self.crud.delete(session, id=spy_id)
+        result = await self.crud.delete(session, id=spy_id)
+        if result:
+            return Spy.from_orm(result)
+        return None
     
     # Custom operations
     async def get_by_codename(self, session: AsyncSession, codename: str) -> Optional[Spy]:
         """Get a spy by codename asynchronously."""
-        query = select(Spy).where(Spy.codename == codename)
+        query = select(SpyModel).where(SpyModel.codename == codename)
         result = await session.execute(query)
-        return result.scalars().first()
+        db_spy = result.scalars().first()
+        if db_spy:
+            return Spy.from_orm(db_spy)
+        return None
     
     async def search_by_specialty(self, session: AsyncSession, specialty: str) -> List[Spy]:
         """Search spies by specialty asynchronously."""
-        query = select(Spy).where(Spy.specialty == specialty)
+        query = select(SpyModel).where(SpyModel.specialty == specialty)
         result = await session.execute(query)
-        return list(result.scalars().all())
+        return [Spy.from_orm(spy) for spy in result.scalars().all()]
     
     # Sync versions for compatibility with existing code
+    def get_sync(self, session: Session, spy_id: str) -> Optional[Spy]:
+        """Get a spy by ID synchronously."""
+        db_spy = session.get(SpyModel, spy_id)
+        if db_spy:
+            return Spy.from_orm(db_spy)
+        return None
     def get_sync(self, session: Session, spy_id: str) -> Optional[Spy]:
         """Get a spy by ID (synchronous version)."""
         return session.query(Spy).filter(Spy.id == spy_id).first()
