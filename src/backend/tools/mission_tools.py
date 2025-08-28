@@ -14,8 +14,8 @@ class MissionContextRequest(BaseModel):
 class MissionTools:
     """Tools for mission operations."""
     
-    @staticmethod
-    def get_mission_context(mission_id: str) -> Dict[str, Any]:
+    @classmethod
+    def get_mission_context(cls, mission_id: str) -> Dict[str, Any]:
         """
         Retrieve context about a specific mission.
         
@@ -23,17 +23,19 @@ class MissionTools:
             mission_id: The ID of the mission to get context for
             
         Returns:
-            Dict containing mission context or string if mission not found
+            Dict containing mission context with required fields for ChatResponse
         """
         logger.debug("Looking up mission context for mission_id: %s", mission_id)
         mission_path = Path(f"missions/{mission_id}.txt")
         
         if not mission_path.exists():
-            logger.warning("Mission not found: %s", mission_id)
+            logger.info("Mission not found: %s", mission_id)
             return {
-                "mission_id": mission_id,
-                "error": f"Mission not found: {mission_id}",
-                "status": "error"
+                "response": f"No mission details found for mission ID: {mission_id}",
+                "spy_id": "",
+                "spy_name": "",
+                "message": "",
+                "tool_calls": []
             }
         
         try:
@@ -41,9 +43,11 @@ class MissionTools:
             content = mission_path.read_text(encoding="utf-8")
             
             result = {
-                "mission_id": mission_id,
-                "content": content,
-                "status": "success"
+                "response": content,
+                "spy_id": "",
+                "spy_name": "",
+                "message": "",
+                "tool_calls": []
             }
             
             logger.debug("Successfully retrieved mission context for %s", mission_id)
@@ -53,9 +57,11 @@ class MissionTools:
             error_msg = f"Error reading mission file: {str(e)}"
             logger.error("%s - %s: %s", error_msg, type(e).__name__, str(e))
             return {
-                "mission_id": mission_id,
-                "error": f"Error processing mission: {str(e)}",
-                "status": "error"
+                "response": f"Error retrieving mission details: {str(e)}",
+                "spy_id": "",
+                "spy_name": "",
+                "message": "",
+                "tool_calls": []
             }
     
     @classmethod

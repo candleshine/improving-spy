@@ -1,4 +1,5 @@
 import logging
+import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..services.agent import ChatAgent
 from ..core.database import get_db
-from ..models import ChatRequest, ChatResponse, Spy, SpyCreate, SpyBase
+from ..models import ChatRequest, ChatResponse, Spy, SpyCreate
 from ..repositories.conversation_repository import ConversationRepository
 from ..repositories.spy_repository import SpyRepository
 
@@ -17,19 +18,43 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Chat"])
 
 # Initialize repositories
-spy_repository = SpyRepository()
-conversation_repository = ConversationRepository()
 
-# -------------------------------
-# Dependencies
-# -------------------------------
+def is_valid_uuid(val):
+    try:
+        uuid.UUID(str(val))
+        return True
+    except ValueError:
+        return False
 
-def get_agent(spy_id: str, db: Session = Depends(get_db)) -> ChatAgent:
-    """Dependency that provides a ChatAgent instance for the spy."""
-    spy = spy_repository.get_sync(db, spy_id)
+# Dependency that provides a ChatAgent instance for the spy.
+def get_agent(spy_identifier: str, db: Session = Depends(get_db)) -> ChatAgent:
+    """Dependency that provides a ChatAgent instance for the spy.
+    
+    Args:
+        spy_identifier: Either a spy's UUID or codename
+    """
+    repo = SpyRepository(db)
+    
+    # First try to get by ID (UUID)
+    if is_valid_uuid(spy_identifier):
+        spy = repo.get(spy_identifier)
+    else:
+        # If not a valid UUID, try to find by codename
+        spy = repo.get_by_codename(spy_identifier)
+    
     if not spy:
-        raise HTTPException(status_code=404, detail=f"Spy {spy_id} not found")
-    return ChatAgent(spy)
+        raise HTTPException(status_code=404, detail=f"Spy not found: {spy_identifier}")
+    
+    # Convert SQLAlchemy model to dict to avoid passing the session
+    spy_dict = {
+        'id': str(spy.id),  # Ensure id is a string as expected by Pydantic
+        'name': spy.name,
+        'codename': spy.codename,
+        'biography': spy.biography,
+        'specialty': spy.specialty
+    }
+    
+    return ChatAgent(spy_dict)
 
 # -------------------------------
 # Endpoints
@@ -40,64 +65,71 @@ def get_agent(spy_id: str, db: Session = Depends(get_db)) -> ChatAgent:
 # -------------------------------
 
 @router.get("/spies/", response_model=List[Spy])
-async def list_spies(
+def list_spies(
     skip: int = 0, 
     limit: int = 100, 
     db: Session = Depends(get_db)
 ):
     """List all spies with pagination"""
-    return await spy_repository.list(db, skip=skip, limit=limit)
+    repo = SpyRepository(db)
+    return repo.list(skip=skip, limit=limit)
 
 @router.post("/spies/", response_model=Spy, status_code=status.HTTP_201_CREATED)
-async def create_spy(
+def create_spy(
     spy: SpyCreate,
     db: Session = Depends(get_db)
 ):
     """Create a new spy"""
-    db_spy = await spy_repository.create(db, spy.dict())
+    repo = SpyRepository(db)
+    db_spy = repo.create(spy.model_dump())
     return db_spy
 
 @router.get("/spies/{spy_id}", response_model=Spy)
-async def get_spy(
+def get_spy(
     spy_id: str,
     db: Session = Depends(get_db)
 ):
     """Get a spy by ID"""
-    spy = await spy_repository.get(db, spy_id)
+    repo = SpyRepository(db)
+    spy = repo.get(spy_id)
     if not spy:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Spy with ID {spy_id} not found"
-        )
+        raise HTTPException(status_code=404, detail="Spy not found")
+    return spy
+
+@router.get("/spies/codename/{codename}", response_model=Spy)
+def get_spy_by_codename(
+    codename: str,
+    db: Session = Depends(get_db)
+):
+    """Get a spy by codename"""
+    repo = SpyRepository(db)
+    spy = repo.get_by_codename(codename)
+    if not spy:
+        raise HTTPException(status_code=404, detail=f"Spy with codename '{codename}' not found")
     return spy
 
 @router.put("/spies/{spy_id}", response_model=Spy)
-async def update_spy(
+def update_spy(
     spy_id: str,
     spy_update: Spy,
     db: Session = Depends(get_db)
 ):
     """Update a spy"""
-    spy = await spy_repository.update(db, spy_id, spy_update.dict(exclude_unset=True))
-    if not spy:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Spy with ID {spy_id} not found"
-        )
-    return spy
+    repo = SpyRepository(db)
+    db_spy = repo.update(spy_id, spy_update.dict())
+    if not db_spy:
+        raise HTTPException(status_code=404, detail="Spy not found")
+    return db_spy
 
 @router.delete("/spies/{spy_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_spy(
+def delete_spy(
     spy_id: str,
     db: Session = Depends(get_db)
 ):
     """Delete a spy"""
-    spy = await spy_repository.delete(db, spy_id)
-    if not spy:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Spy with ID {spy_id} not found"
-        )
+    repo = SpyRepository(db)
+    if not repo.delete(spy_id):
+        raise HTTPException(status_code=404, detail="Spy not found")
     return None
 
 # -------------------------------
@@ -116,41 +148,44 @@ async def chat_with_spy(
     Each spy has exactly one active conversation. Messages are automatically
     added to the spy's conversation history.
     """
+    logger.info(f"Received chat request for spy_id: {spy_id}")
     try:
-        # Get or create the spy's conversation
-        conversation = conversation_repository.get_or_create_by_spy_id(db, spy_id)
-        
-        # Get the agent
-        agent = get_agent(spy_id, db)
-        
-        # Get the response from the agent
-        result = await agent.chat(
-            message=request.message,
-            conversation_id=str(conversation.id)
-        )
-        
-        # Save messages to conversation history
-        conversation_repository.add_message(
-            db,
-            conversation_id=str(conversation.id),
-            role="user",
-            content=request.message
-        )
-        
-        conversation_repository.add_message(
-            db,
-            conversation_id=str(conversation.id),
-            role="assistant",
-            content=result["response"]
-        )
-        
-        return ChatResponse(
-            spy_id=spy_id,
-            spy_name=agent.spy.name,
-            message=request.message,
-            response=result["response"],
-            tool_calls=result.get("tool_calls", [])
-        )
+        # Initialize conversation repository
+        logger.info("Initializing conversation repository...")
+        conversation_repository = ConversationRepository(db)
+        logger.info("Conversation repository initialized")
+
+        try:
+            # Get the agent
+            logger.info(f"Getting agent for spy_id: {spy_id}")
+            agent = get_agent(spy_id, db)
+            logger.info("Agent initialized successfully")
+            
+            # Get the response from the agent
+            logger.info("Sending message to agent...")
+            result = await agent.chat(message=request.message)
+            logger.info("Received response from agent")
+            
+            # Return a simple response with the agent's reply
+            response = {
+                "spy_id": result.get("spy_id", ""),
+                "spy_name": result.get("spy_name", "Unknown"),
+                "message": request.message,
+                "response": result.get("response", ""),
+                "tool_calls": result.get("tool_calls", [])
+            }
+            logger.info("Sending response back to client")
+            return response
+            
+        except HTTPException as he:
+            logger.error(f"HTTP Exception in chat processing: {str(he)}")
+            raise
+        except Exception as e:
+            logger.error(f"Error in chat processing: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error processing chat: {str(e)}"
+            )
         
     except HTTPException:
         raise
