@@ -71,7 +71,8 @@ htmlcov/
 .mypy_cache/
 
 # Windsurf specific
-.windsurf/
+.windsurf/*
+!.windsurf/rules/
 
 # UV package manager
 .uv/

@@ -84,6 +84,11 @@ chat-with-agent/
 
 ## 🚀 Getting Started
 
+### Prerequisites
+
+- Python 3.11 or higher
+- [Ollama](https://ollama.ai/) installed and running (for local LLM support)
+
 ### 1. Install UV (if you don't have it)
 
 `uv` is a fast, modern Python package manager. We'll use it to manage our environment and dependencies.
@@ -116,9 +121,29 @@ uv sync
 
 ### 4. Run the Server
 
+Open a terminal and run:
+
 ```bash
-uv run python src/main.py
+uv run uvicorn main:app --port 8000 --reload
 ```
+
+This will start the FastAPI server with auto-reload enabled. The server will be available at `http://localhost:8000`.
+
+### 5. Start the Client Application
+
+Open a new terminal window (keep the server running) and run:
+
+```bash
+uv run run_cli.py
+```
+
+This will launch the Textual-based CLI client to interact with your spy agents.
+
+### 6. Access API Documentation
+
+Once the server is running, you can access the interactive API documentation at:
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
 
 ---
 

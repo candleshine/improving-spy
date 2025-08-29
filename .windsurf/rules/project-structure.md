@@ -1,0 +1,64 @@
+---
+trigger: always_on
+description: Use this rule when you need to understand the overall project architecture, locate specific files, or understand how different components interact in the Python Spy Agency project. Essential for navigation and understanding the codebase structure.
+globs:
+---
+
+# Python Spy Agency Project Structure
+
+This is a full-stack Python application with a FastAPI backend and Textual-based CLI frontend. The project follows a clean architecture pattern with clear separation of concerns.
+
+## Backend Architecture (`src/backend/`)
+
+### Core Components
+- **Database**: [database.py](mdc:src/backend/core/database.py) - SQLAlchemy setup and session management
+- **WebSocket Manager**: [websocket_manager.py](mdc:src/backend/core/websocket_manager.py) - Real-time communication handling
+
+### API Layer (`src/backend/api/`)
+- **Routes**: [routes.py](mdc:src/backend/api/routes.py) - FastAPI endpoints for spies and chat functionality
+- **Main Entry**: [main.py](mdc:main.py) - Server startup and configuration
+
+### Models (`src/backend/models/`)
+- **Data Models**: [__init__.py](mdc:src/backend/models/__init__.py) - Pydantic models for API and SQLAlchemy ORM models
+- **Key Models**: `Spy`, `SpyCreate`, `Conversation`, `ChatRequest`, `ChatResponse`
+
+### Services (`src/backend/services/`)
+- **Agent Service**: [agent.py](mdc:src/backend/services/agent.py) - AI agent logic using Pydantic AI and Ollama
+
+### Repositories (`src/backend/repositories/`)
+- **Spy Repository**: [spy_repository.py](mdc:src/backend/repositories/spy_repository.py) - Data access for spy entities
+- **Conversation Repository**: [conversation_repository.py](mdc:src/backend/repositories/conversation_repository.py) - Chat history management
+
+### Tools (`src/backend/tools/`)
+- **Mission Tools**: [mission_tools.py](mdc:src/backend/tools/mission_tools.py) - Specialized spy mission functionality
+
+## Frontend Architecture (`src/client/`)
+
+### Core Application
+- **Main App**: [app.py](mdc:src/client/app.py) - Textual application entry point
+- **Spy CLI**: [spy_cli.py](mdc:src/client/spy_cli.py) - Main CLI interface
+- **API Client**: [api_client.py](mdc:src/client/api_client.py) - Backend communication
+
+### UI Components (`src/client/widgets/`)
+- **Chat Window**: [chat_window.py](mdc:src/client/widgets/chat_window.py) - Main chat interface
+- **Input Bar**: [input_bar.py](mdc:src/client/widgets/input_bar.py) - User input handling
+- **Spy Selector**: [spy_selector.py](mdc:src/client/widgets/spy_selector.py) - Agent selection interface
+- **Typing Indicator**: [typing_indicator.py](mdc:src/client/widgets/typing_indicator.py) - Visual feedback
+
+### Screens (`src/client/screens/`)
+- **Main Screen**: [main.py](mdc:src/client/screens/main.py) - Primary application screen
+
+## Configuration & Dependencies
+- **Project Config**: [pyproject.toml](mdc:pyproject.toml) - Dependencies and project metadata
+- **Frontend Dependencies**: [src/client/requirements.txt](mdc:src/client/requirements.txt) - Frontend-specific packages
+- **Styles**: [styles/spy_console.tcss](mdc:styles/spy_console.tcss) - Textual UI styling
+
+## Testing & Development
+- **Tests**: [tests/](mdc:tests/) - Test suite for backend and frontend components
+- **HTTP Requests**: [requests/](mdc:requests/) - API testing and development requests
+- **Lesson Plans**: [lesson-plans/](mdc:lesson-plans/) - Course materials and documentation
+
+## Key Entry Points
+- **Backend Server**: Run `uv run python main.py` from project root
+- **Frontend CLI**: Run `uv run python src/client/spy_cli.py` from project root
+- **CLI Runner**: Alternative entry via [run_cli.py](mdc:run_cli.py)
