@@ -119,6 +119,8 @@ uv sync
 
 *Note: For the course, we will add dependencies week by week using `uv add <package-name>`.*
 
+### 4. Run the Server
+
 Open a terminal and run:
 
 ```bash
