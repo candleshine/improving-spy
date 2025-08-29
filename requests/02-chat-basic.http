@@ -9,7 +9,7 @@ Accept: application/json
 
 ### Chat with a spy using codename
 # @name chatWithSpy
-POST http://localhost:8000/api/chat/007
+POST http://localhost:8000/api/chat/{{spy_codename}}
 Content-Type: application/json
 
 {

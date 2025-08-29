@@ -12,8 +12,14 @@ class InputBar(Horizontal):
         self.on_submit = on_submit
         
     def compose(self) -> ComposeResult:
-        yield Input(placeholder="Type your message here...", id="message-input")
+        yield Input(placeholder="", id="message-input")
         yield Button("Send", id="send-button", variant="primary")
+        
+    def on_mount(self) -> None:
+        """Set placeholder text after mount"""
+        input_widget = self.query_one("#message-input", Input)
+        if not self.has_class("pre-selection"):
+            input_widget.placeholder = "Type your message here..."
         
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle send button press"""

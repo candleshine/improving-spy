@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text
+from sqlalchemy import Column, String, Text, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
@@ -10,10 +10,13 @@ __all__ = ['Spy', 'SpyBase', 'SpyCreate', 'SpyModel', 'Conversation', 'SpyProfil
 # Database Model: Spy (SQLAlchemy)
 class SpyModel(Base):
     __tablename__ = "spies"
+    __table_args__ = (
+        UniqueConstraint('codename', name='uq_spies_codename'),
+    )
 
     id = Column(String, primary_key=True)
     name = Column(String, nullable=False)
-    codename = Column(String, nullable=False)
+    codename = Column(String, nullable=False, unique=True)
     biography = Column(Text, nullable=False)
     specialty = Column(String, nullable=False)
 

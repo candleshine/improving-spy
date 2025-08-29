@@ -130,9 +130,15 @@ class ChatMessage(Static):
             avatar = self.spy_avatar or "??"
             message_content = self._parse_message(self.message)
             timestamp_text = Text(f"[{time_str}]", style="dim")
+            
+            # Get the codename from the message if available (format: "[AVATAR] Codename: message")
+            codename = "Agent"
+            if hasattr(self, 'spy_codename'):
+                codename = self.spy_codename
+            
             panel = Panel(
                 message_content,
-                title=avatar,
+                title=f"{avatar} {codename}",
                 title_align="left",
                 subtitle=timestamp_text,
                 subtitle_align="left",
@@ -160,6 +166,7 @@ class ChatWindow(ScrollableContainer):
         super().__init__()
         self.spy_name = spy_name
         self.spy_avatar = spy_avatar
+        self.spy_codename = spy_name  # Store the codename
         self.typing_indicator = None
         
     def compose(self) -> ComposeResult:
@@ -178,6 +185,9 @@ class ChatWindow(ScrollableContainer):
             is_user=is_user,
             spy_avatar=self.spy_avatar if not is_user else None
         )
+        # Add codename for spy messages
+        if not is_user:
+            chat_message.spy_codename = self.spy_codename
         self.mount(chat_message)
         self.scroll_end(animate=False)
         
