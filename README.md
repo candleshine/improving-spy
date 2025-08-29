@@ -101,22 +101,23 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 pip install uv
 ```
 
-### 2. Clone This Repository
+### 2. Clone This Repo
 
 ```bash
-git clone https://github.com/your-username/improving-spy.git
-cd improving-spy
+# Use the GitHub CLI or clone manually
+git clone https://github.com/your-username/chat-with-agent.git
+cd chat-with-agent
 ```
 
-### 3. Install Dependencies
+### 3. Initialize the Project & Install Dependencies
 
-This command creates a virtual environment and installs all required packages:
+This single command creates a virtual environment and installs all the packages listed in `pyproject.toml`.
 
 ```bash
 uv sync
 ```
 
-### 4. Start the Backend Server
+*Note: For the course, we will add dependencies week by week using `uv add <package-name>`.*
 
 Open a terminal and run:
 
