@@ -19,7 +19,7 @@ class ChatAgent:
         
         # Set up the AI model
         model = OpenAIModel(
-            'llama3.2',
+            'qwen3:1.7b',
             provider=OllamaProvider(base_url='http://localhost:11434/v1'),
         )
         

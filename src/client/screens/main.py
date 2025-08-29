@@ -10,7 +10,7 @@ from textual.widgets import Header, Footer, Label
 from textual.reactive import reactive
 
 from ..api_client import SpyAPIClient
-from ..widgets.spy_selector import SpySelector, SpyListItem, SpySelected
+from ..widgets.spy_selector import SpySelector, SpySelected
 from ..widgets.chat_window import ChatWindow
 from ..widgets.input_bar import InputBar
 from ..history_manager import HistoryManager
@@ -38,29 +38,50 @@ class MainScreen(Screen):
     
     def compose(self):
         """Create child widgets for the app."""
+        self.log("Starting UI composition...")
         yield Header()
         
-        with Container(id="app-grid"):
-            with Vertical(id="left-panel"):
-                yield Label("Available Spies", classes="section-title")
-                # Initialize with empty spies list
-                yield SpySelector(
-                    id="spy-selector",
-                    spies=[]  # Will be populated in on_mount
-                )
+        try:
+            with Container(id="app-grid"):
+                with Vertical(id="left-panel"):
+                    self.log("Creating left panel...")
+                    yield Label("Available Spies", classes="section-title")
+                    
+                    # Create a container for the spy selector
+                    with Container(classes="spy-selector-wrapper"):
+                        self.log("Creating SpySelector...")
+                        # Initialize with empty spies list
+                        self.spy_selector = SpySelector(
+                            id="spy-selector",
+                            spies=self.spies  # Pass the current spies list
+                        )
+                        self.log(f"SpySelector created: {self.spy_selector}")
+                        yield self.spy_selector
+                
+                with Vertical(id="right-panel"):
+                    self.log("Creating right panel...")
+                    # Create a container for the chat window with an ID
+                    with Container(id="chat-window", classes="pre-selection"):
+                        # Initialize with default values that can be updated later
+                        self.chat_component = ChatWindow(
+                            spy_name="Agent",
+                            spy_avatar="👤"
+                        )
+                        self.log(f"ChatWindow created: {self.chat_component}")
+                        yield self.chat_component
+                    
+                    self.log("Creating InputBar...")
+                    self.input_bar = InputBar(on_submit=self._on_message_submit)
+                    self.input_bar.add_class("pre-selection")
+                    yield self.input_bar
             
-            with Vertical(id="right-panel"):
-                # Create a container for the chat window with an ID
-                with Container(id="chat-window"):
-                    # Initialize with default values that can be updated later
-                    self.chat_component = ChatWindow(
-                        spy_name="Agent",
-                        spy_avatar="👤"
-                    )
-                    yield self.chat_component
-                yield InputBar(on_submit=self._on_message_submit)
-        
-        yield Footer()
+            self.log("Creating Footer...")
+            yield Footer()
+            self.log("UI composition completed successfully")
+            
+        except Exception as e:
+            self.log(f"Error during composition: {str(e)}", level="error")
+            raise
     
     async def on_mount(self) -> None:
         """Initialize the screen after mounting."""
@@ -69,15 +90,18 @@ class MainScreen(Screen):
     async def load_spies(self) -> None:
         """Load available spies from the API."""
         try:
+            self.log("Loading spies...")
             self.spies = await self.api_client.get_spies()
-            selector = self.query_one(SpySelector)
+            self.log(f"Retrieved {len(self.spies)} spies from API")
+            
+            # Use the stored spy_selector reference
+            if not hasattr(self, 'spy_selector') or not self.spy_selector:
+                self.log("Error: SpySelector not found or not initialized", level="error")
+                return
+                
             # Update the spies list in the selector
-            selector.spies = self.spies
-            # Clear and repopulate the list
-            spy_list = selector.query_one("#spy-list")
-            spy_list.clear()
-            for spy in self.spies:
-                spy_list.append(SpyListItem(spy))
+            self.spy_selector.update_spies(self.spies)
+            self.log(f"Finished loading {len(self.spies)} spies")
         except Exception as e:
             self.notify(f"Failed to load spies: {str(e)}", severity="error")
             
@@ -93,10 +117,27 @@ class MainScreen(Screen):
         self.active_spy = spy_data
         self.chat_component.spy_name = spy_data.get('name', 'Agent')
         self.chat_component.spy_avatar = spy_data.get('avatar', '👤')
+        self.chat_component.spy_codename = spy_data.get('codename', 'Agent')
         self.chat_component.clear()
         
+        # Hide the left panel containing the spy selector
+        left_panel = self.query_one("#left-panel")
+        if left_panel:
+            left_panel.add_class("hidden")
+        
+        # Show the chat window and input bar by removing pre-selection class
+        chat_window = self.query_one("#chat-window")
+        if chat_window:
+            chat_window.remove_class("pre-selection")
+            
+        input_bar = self.query_one("#input-bar")
+        if input_bar:
+            input_bar.remove_class("pre-selection")
+        
+        # Focus the input field and set placeholder
         input_field = self.query_one("#message-input")
         if input_field:
+            input_field.placeholder = "Type your message here..."
             input_field.focus()
             
         spy_name = spy_data.get('name', 'Unknown')

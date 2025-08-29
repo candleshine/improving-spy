@@ -1,13 +1,18 @@
 /* Main screen styling */
 Screen {
-    background: #000000;
-    color: #00ff00;
+    background: rgb(0, 0, 0);
+    color: rgb(0, 255, 0);
+}
+
+/* Hide elements with hidden class */
+.hidden {
+    display: none;
 }
 
 /* Section title styling */
 .section-title {
-    background: #003300;
-    color: #00ff00;
+    background: rgb(0, 51, 0);
+    color: rgb(0, 255, 0);
     padding: 1;
     text-align: center;
     width: 100%;
@@ -15,39 +20,135 @@ Screen {
 
 /* Spy name styling */
 .spy-name {
-    background: #003300;
-    color: #00ff00;
+    background: rgb(0, 51, 0);
+    color: rgb(0, 255, 0);
     width: 100%;
     text-align: left;
     padding: 0 1;
 }
 
 .spy-name.selected {
-    background: #00aa00;
-    color: #000000;
+    background: rgb(0, 170, 0);
+    color: rgb(0, 0, 0);
     text-style: bold;
 }
 
 /* Spy selector */
 #spy-selector {
-    height: auto;
+    height: 100vh;
     margin: 1 0;
-    border: solid green;
+    border: solid rgb(0, 128, 0);
+    width: 100%;
+    display: block;
+}
+
+/* Spy selector container */
+.spy-selector-container {
+    height: 100%;
+    width: 100%;
+    display: block;
+    layout: vertical;
+}
+
+/* Spy selector wrapper */
+.spy-selector-wrapper {
+    height: 90vh;
+    width: 100%;
+    display: block;
+}
+
+/* Spy list container */
+#spy-list-container {
+    height: 80vh;
+    width: 100%;
+    overflow-y: auto;
+    border: solid rgb(0, 128, 0);
+    margin: 1 0;
 }
 
 /* Spy list */
-.spy-list {
+#spy-list {
+    width: 100%;
     height: auto;
-    border: none;
+    min-height: 10;
+    max-height: 100%;
+    background: rgb(0, 20, 0);
+    border: solid rgb(0, 255, 0);
+    padding: 1;
+    margin: 1 0;
+    overflow-y: auto;
+}
+
+/* Spy avatar - removed duplicate definition */
+
+/* Spy name */
+.spy-name {
+    width: 1fr;
+    color: rgb(0, 255, 0);  /* Ensure spy names are visible */
+    text-style: bold;
+    background: rgb(0, 30, 0);
+    padding: 0 1;
+}
+
+/* Spy ID - removed duplicate definition */
+
+/* Spy list container - removed duplicate definition */
+
+/* Spy list */
+.spy-list {
+    height: 70vh;  /* Set a fixed height with viewport units */
+    overflow-y: auto;  /* Enable vertical scrolling */
+    border: solid rgb(0, 68, 0);
+    width: 100%;
+    padding: 1;
+    display: block;
+}
+
+/* Spy item container */
+.spy-item {
+    width: 100%;
+    layout: horizontal;
+    align: center middle;
+    padding: 1;
+    border-bottom: solid rgb(0, 34, 0);
+    color: rgb(0, 255, 0);  /* Ensure text is visible with green color */
+}
+
+/* Hover state */
+.spy-item:hover {
+    background: rgb(0, 34, 0);
+}
+
+/* Selected state */
+.spy-item.selected {
+    background: rgb(0, 80, 0);
+    color: rgb(255, 255, 255);
+    border: solid rgb(0, 255, 0);
+    text-style: bold;
+}
+
+/* Selected and hovered state */
+.spy-item.selected:hover {
+    background: rgb(0, 85, 0);
+}
+
+/* Spy ID label */
+.spy-id {
+    color: rgb(0, 200, 0);  /* Brighter green for better visibility */
+    text-style: italic;
+    margin-left: 1;
+    opacity: 0.9;  /* Increased opacity for better visibility */
 }
 
 /* Spy avatar */
 .spy-avatar {
-    background: #003300;
-    color: white;
+    background: rgb(0, 51, 0);
+    color: rgb(255, 255, 255);
     min-width: 4;
     text-align: center;
     margin-right: 1;
+    border: solid rgb(0, 100, 0);
+    padding: 0 1;
 }
 
 /* Chat window */
@@ -57,6 +158,14 @@ Screen {
     margin: 1 0;
     padding: 0 1;
     overflow-y: auto;
+}
+
+/* Hide chat until spy is selected */
+#chat-window.pre-selection,
+#input-bar.pre-selection,
+.pre-selection #message-input,
+.pre-selection #send-button {
+    display: none !important;
 }
 
 /* Input bar */
