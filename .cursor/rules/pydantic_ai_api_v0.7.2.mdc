@@ -46,9 +46,45 @@ class MyAgent(Agent):
 
 **Key Methods**:
 - `run()`: Execute the agent with a given input
-- `chat()`: Have a conversation with the agent
+- `run_sync()`: Execute the agent synchronously
+- `run_stream()`: Stream the agent's execution
+- `iter()`: Iterate through the agent's execution steps
 - `add_tool()`: Add a tool to the agent
 - `add_function()`: Add a function to the agent
+
+#### `AgentRunResult`
+The result of running an agent, returned by the `run()` method.
+
+```python
+from pydantic_ai import Agent
+
+agent = Agent('test')
+result = await agent.run('Hello!')
+
+# Access the output
+print(result.output)  # The main response content
+
+# Access conversation history
+messages = result.all_messages()
+if callable(messages):
+    messages = messages()  # all_messages is a method
+
+# Check for tool calls in the messages
+for msg in messages:
+    if hasattr(msg, 'parts'):
+        for part in msg.parts:
+            if hasattr(part, 'part_kind') and 'tool-call' in str(part.part_kind).lower():
+                # Extract tool call information
+                tool_name = getattr(part, 'tool_name', '')
+                tool_call_id = getattr(part, 'tool_call_id', '')
+                args = part.args_as_dict() if callable(part.args_as_dict) else {}
+```
+
+**Key Attributes**:
+- `output`: The main response content from the agent
+- `all_messages()`: Method that returns the conversation history
+- `new_messages()`: Method that returns only new messages from this run
+- `usage`: Information about token usage and costs
 
 #### `Tool`
 Base class for creating tools that agents can use.
@@ -56,16 +92,19 @@ Base class for creating tools that agents can use.
 ```python
 from pydantic_ai import Tool
 
-class MyTool(Tool):
-    """A custom tool for the agent."""
-    
-    name: str = "my_tool"
-    description: str = "Performs a specific task"
-    
-    def run(self, input_data: str) -> str:
-        """Execute the tool logic."""
-        # Tool implementation here
-        return f"Processed: {input_data}"
+# CORRECT - Function as first argument
+tool = Tool(
+    my_function,  # Function as first positional argument
+    name="my_tool",
+    description="Performs a specific task"
+)
+
+# INCORRECT - Function as keyword argument
+tool = Tool(
+    name="my_tool",
+    function=my_function,  # This won't work
+    description="Performs a specific task"
+)
 ```
 
 **Key Attributes**:
@@ -226,18 +265,21 @@ response = agent.run("Calculate 15 + 27 and then process some data")
 print(response)
 ```
 
-#### Chat-based Interaction
+#### Run-based Interaction
 ```python
-# Start a chat session
-chat = agent.chat()
+# Execute the agent with a single prompt
+response = await agent.run("Hello! Can you help me with some calculations?")
 
-# Send messages
-response1 = chat.send("Hello! Can you help me with some calculations?")
-response2 = chat.send("What's 42 divided by 6?")
-response3 = chat.send("Now can you process this data: [{'value': 10}, {'value': 20}, {'value': 30}] with operation 'sum'?")
+# Execute with multiple messages
+messages = [
+    ModelMessage(role="user", content="Hello! Can you help me with some calculations?"),
+    ModelMessage(role="user", content="What's 42 divided by 6?")
+]
+response = await agent.run(message_history=messages)
 
-# Get chat history
-history = chat.history
+# Stream the execution
+async for step in agent.run_stream("Process this data: [{'value': 10}, {'value': 20}, {'value': 30}] with operation 'sum'?"):
+    print(f"Step: {step}")
 ```
 
 #### Tool and Function Registration
