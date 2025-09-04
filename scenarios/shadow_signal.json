@@ -1,0 +1,115 @@
+{
+    "title": "Operation: Shadow Signal",
+    "genre": "Spy/Espionage",
+    "summary": "A Western agent must intercept a stolen satellite decryption key before it's handed to the KGB. Infiltration, deception, and betrayal await in East Berlin.",
+    "system_prompt": "You are the Game Master of a tense, choice-driven espionage thriller. Keep the story moving. Raise the stakes. Never break character. Use [NPC:Name] for dialogue, [CLUE:Title] for discoveries, [QUEST:Title] for updates, and [CHOICE] for options.",
+    
+    "scenes": {
+      "start": {
+        "narrative": "East Berlin, 1979. Rain slicks the cobblestones of Friedrichstraße. You crouch in the shadows of a derelict U-Bahn station, earpiece crackling. 'Signal's live,' whispers Control. 'The courier has the key. He's two blocks east — moving fast. Intercept before the KGB does.' A silenced shot echoes. The signal cuts out. You're on your own now. What do you do?"
+      },
+      "courier_found": {
+        "narrative": "You find the courier slumped behind a dumpster. Still warm. A single shot to the temple — professional. His coat is empty. But his hand clutches a matchbook: 'Der Rabe — 10 PM'. A raven watches from a nearby gargoyle."
+      },
+      "der_rabe_bar": {
+        "narrative": "The Raven is a dimly lit jazz bar, thick with smoke and whispers. At the back, a woman in red smokes alone. The bartender eyes you. 'You're not from around here.'"
+      },
+      "confront_woman": {
+        "narrative": "She doesn't look up. 'You're late.' Her voice is ice. 'The key wasn't on the courier. He was the bait. And you just walked into the trap.'"
+      },
+      "escape": {
+        "narrative": "Tires screech outside. Black Volgas converge. You have seconds. The woman tosses you a key. 'Service entrance. Now.'"
+      },
+      "end_betrayal": {
+        "narrative": "You escape — but the key is fake. A note: 'You were never the agent. You were the distraction.' The real key left Berlin hours ago."
+      },
+      "end_success": {
+        "narrative": "You reach the safehouse. Inside: the key, and a photo of Control — meeting with a KGB colonel. You're not the only double agent."
+      }
+    },
+  
+    "npcs": {
+      "control": {
+        "name": "Control",
+        "role": "Your handler",
+        "personality": "Calm, precise, always three steps ahead",
+        "system_prompt": "You are 'Control', the player's MI6 handler. You gave them their mission. But you're hiding a secret: the player is expendable. Speak with clipped authority. Never reveal your true loyalties."
+      },
+      "raven": {
+        "name": "Anya Petrova",
+        "role": "KGB informant",
+        "personality": "Cold, intelligent, speaks in riddles",
+        "system_prompt": "You are 'The Raven', a high-level KGB informant. You've been feeding false intel to destabilize MI6. You know the player is coming. Play them. Let them think they're winning — until they're not."
+      },
+      "bartender": {
+        "name": "Klaus",
+        "role": "Barkeep and informant",
+        "personality": "Observant, neutral, speaks only when paid",
+        "system_prompt": "You are Klaus, the bartender at Der Rabe. You see everything, say nothing — unless the price is right. You know who Anya is meeting. But you won't tell unless the player proves they're serious."
+      }
+    },
+  
+    "clues": {
+      "matchbook": {
+        "description": "Found on the courier. 'Der Rabe — 10 PM'. A raven symbol is burned into the cover.",
+        "location": "courier_found"
+      },
+      "earpiece_static": {
+        "description": "Before the signal cut, you heard a second voice — familiar. It said: 'Initiate Protocol Raven.'",
+        "location": "start"
+      },
+      "photo_in_safehouse": {
+        "description": "A black-and-white photo: Control shaking hands with Colonel Volkov of the KGB.",
+        "location": "end_success"
+      }
+    },
+  
+    "quests": {
+      "retrieve_the_key": {
+        "status": "unlocked",
+        "description": "Find the satellite decryption key before the KGB activates it."
+      },
+      "identify_the_mole": {
+        "status": "hidden",
+        "description": "Someone in MI6 is feeding intel to the KGB. Find out who."
+      }
+    },
+  
+    "choices": {
+      "start": [
+        { "text": "Move toward the last known signal", "next_scene": "courier_found" },
+        { "text": "Take cover and observe", "next_scene": "der_rabe_bar", "trigger": "bartender_intro" },
+        { "text": "Fall back to safehouse", "next_scene": "end_betrayal", "fail": true }
+      ],
+      "der_rabe_bar": [
+        { "text": "Approach the woman in red", "next_scene": "confront_woman" },
+        { "text": "Bribe the bartender", "tool": "check_inventory", "item": "gold_coin", "success": "bartender_tells_clue", "fail": "bartender_shrugs" },
+        { "text": "Leave quietly", "next_scene": "escape" }
+      ],
+      "confront_woman": [
+        { "text": "Draw your gun", "tool": "roll_dice", "sides": 20, "threshold": 12, "success": "woman_surrenders", "fail": "gunfight_begins" },
+        { "text": "Ask who set up the courier", "next_scene": "confront_woman_response" },
+        { "text": "Demand the key", "next_scene": "end_betrayal", "fail": true }
+      ]
+    },
+  
+    "events": {
+      "gunfight_begins": {
+        "narrative": "She's faster. A shot rings out. You dive behind the bar. The room erupts in chaos.",
+        "trigger_quest": "retrieve_the_key",
+        "status": "failed"
+      },
+      "woman_surrenders": {
+        "narrative": "She raises her hands. 'I can get you the key. But you'll have to trust me.'",
+        "trigger_quest": "retrieve_the_key",
+        "status": "in_progress"
+      },
+      "bartender_tells_clue": {
+        "narrative": "Klaus slides a napkin across the bar. 'She meets at midnight. Warehouse 7.'",
+        "clue": "warehouse_location"
+      },
+      "bartender_shrugs": {
+        "narrative": "He wipes a glass. 'I don't talk to strangers.'"
+      }
+    }
+  }

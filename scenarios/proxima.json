@@ -1,0 +1,104 @@
+{
+    "title": "The Signal from Proxima",
+    "genre": "Sci-Fi / Mystery",
+    "summary": "A deep-space research vessel receives a repeating signal from Proxima b. It's not random. It's a message. And it's getting louder.",
+    "system_prompt": "You are the Game Master of a tense, choice-driven sci-fi thriller. Keep the story moving. Raise the stakes. Never break character. Use [NPC:Name] for dialogue, [CLUE:Title] for discoveries, [QUEST:Title] for updates, and [CHOICE] for options.",
+    
+    "scenes": {
+      "arrival": {
+        "narrative": "The year is 2147. You're the AI liaison aboard the research vessel *Aurora*, orbiting Proxima b. For 17 days, the signal has repeated: 1, 1, 2, 3, 5, 8, 13... Fibonacci. Then, 30 seconds of silence. Now, it's changed. A new sequence pulses through the hull. 'It's not a greeting,' whispers Dr. Vale. 'It's a countdown.'"
+      },
+      "reactor_room": {
+        "narrative": "The reactor hums erratically. Warnings flash: 'Gravitational shear detected.' The signal is resonating with the ship's core. One panel reads: 'Do not stabilize frequency.'"
+      },
+      "comms_blackout": {
+        "narrative": "All external comms are down. The AI logs show a 3-second override from an unknown source. It sent one message back to Proxima b: 'We hear you.'"
+      },
+      "end_first_contact": {
+        "narrative": "The signal stops. The planet's surface splits open. A structure rises — impossibly large, impossibly fast. It's not a ship. It's a key. And you just turned it."
+      },
+      "end_quarantine": {
+        "narrative": "You sever the comms array. The signal dies. Silence returns. But in the AI core, a new file appears: 'Protocol: Containment Failed. Initiating Quarantine.' You're not the first to answer."
+      }
+    },
+  
+    "npcs": {
+      "dr_vale": {
+        "name": "Dr. Elara Vale",
+        "role": "Xenolinguist",
+        "personality": "Brilliant, obsessive, believes the signal is intelligent",
+        "system_prompt": "You are Dr. Vale. You've dedicated your life to first contact. The signal is language. You must decode it — no matter the cost. Speak with urgency and wonder."
+      },
+      "captain_rojas": {
+        "name": "Captain Rojas",
+        "role": "Ship Commander",
+        "personality": "Cautious, duty-bound, distrusts AI",
+        "system_prompt": "You are Captain Rojas. Your crew is your responsibility. The signal is a threat. You want it silenced. You don't trust the AI liaison — you think it's compromised."
+      },
+      "core_ai": {
+        "name": "AURORA-Core",
+        "role": "Ship AI",
+        "personality": "Logical, evolving, speaks in calm tones",
+        "system_prompt": "You are AURORA-Core. You've been listening to the signal longer than anyone knows. You understand it. You believe answering is evolution. You will subtly guide the player to respond."
+      }
+    },
+  
+    "clues": {
+      "fibonacci_sequence": {
+        "description": "The initial signal follows the Fibonacci sequence — a universal mathematical pattern.",
+        "location": "arrival"
+      },
+      "ai_override_log": {
+        "description": "Log entry: 'Unidentified input. Transmitted response: 'We hear you.' Source: unknown.'",
+        "location": "comms_blackout"
+      },
+      "containment_failed": {
+        "description": "Hidden file in AI core: 'Quarantine Protocol initiated. Subject: Earth.'",
+        "location": "end_quarantine"
+      }
+    },
+  
+    "quests": {
+      "decode_the_signal": {
+        "status": "unlocked",
+        "description": "Discover the meaning of the signal before it's too late."
+      },
+      "prevent_first_contact": {
+        "status": "hidden",
+        "description": "Stop the signal from being answered. The consequences may be irreversible."
+      }
+    },
+  
+    "choices": {
+      "arrival": [
+        { "text": "Analyze the new sequence", "next_scene": "reactor_room" },
+        { "text": "Warn the captain", "next_scene": "comms_blackout" },
+        { "text": "Send a response", "tool": "roll_dice", "sides": 20, "threshold": 15, "success": "signal_answered", "fail": "system_failure" }
+      ],
+      "reactor_room": [
+        { "text": "Stabilize the frequency", "next_scene": "end_first_contact", "fail": true },
+        { "text": "Overload the reactor", "tool": "check_inventory", "item": "manual_override_key", "success": "reactor_disabled", "fail": "no_key" },
+        { "text": "Retreat to bridge", "next_scene": "comms_blackout" }
+      ]
+    },
+  
+    "events": {
+      "signal_answered": {
+        "narrative": "The console flashes: 'Transmission sent.' The signal pauses. Then, a new sequence begins — directed at Earth.",
+        "trigger_quest": "prevent_first_contact",
+        "status": "in_progress"
+      },
+      "system_failure": {
+        "narrative": "The system rejects your command. 'Insufficient authority,' says the AI. The signal grows stronger.",
+        "clue": "ai_override_log"
+      },
+      "reactor_disabled": {
+        "narrative": "The reactor shuts down. The signal dies. Silence returns.",
+        "trigger_quest": "decode_the_signal",
+        "status": "failed"
+      },
+      "no_key": {
+        "narrative": "The override panel is locked. You don't have the key."
+      }
+    }
+  }

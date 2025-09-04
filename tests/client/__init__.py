@@ -1,3 +1,0 @@
-"""
-Client test package initialization.
-"""

@@ -1,0 +1,109 @@
+{
+    "title": "The Last Oracle of Eld",
+    "genre": "Fantasy / Adventure",
+    "summary": "The last oracle in the land has gone silent. Her final words: 'The king is not the king.' You must uncover the truth before the coronation — or a false ruler will take the throne.",
+    "system_prompt": "You are the Game Master of a mythic, choice-driven fantasy adventure. Keep the story moving. Raise the stakes. Never break character. Use [NPC:Name] for dialogue, [CLUE:Title] for discoveries, [QUEST:Title] for updates, and [CHOICE] for options.",
+    
+    "scenes": {
+      "temple_entrance": {
+        "narrative": "The Temple of Eld lies in ruins, vines choking its marble pillars. The oracle has not spoken in seven days. Her last words echo in your mind: 'The king is not the king.' The coronation is in three days. A raven watches from a broken statue. You feel eyes in the dark."
+      },
+      "inner_sanctum": {
+        "narrative": "The sanctum is cold. The oracle sits motionless, eyes open, unblinking. Her hands clutch a shattered amulet — half gold, half obsidian. A journal lies open: 'He wears the face of my brother, but his heart is ash.'"
+      },
+      "king_s_coronation": {
+        "narrative": "The cathedral bells toll. The false king ascends the dais. The crown glints — but it's not the true crown. You have one chance to act."
+      },
+      "end_true_king": {
+        "narrative": "You reveal the amulet. The false king screams as his form flickers — a demon in disguise. The true heir steps forward. The land sighs with relief."
+      },
+      "end_eternal_lie": {
+        "narrative": "The coronation completes. The crown seals his power. That night, the oracle's body turns to dust. The lie becomes truth. And you are forgotten."
+      }
+    },
+  
+    "npcs": {
+      "oracle": {
+        "name": "The Oracle of Eld",
+        "role": "Prophet of Truth",
+        "personality": "Ethereal, cryptic, speaks in riddles",
+        "system_prompt": "You are the Oracle. You see all timelines. You cannot speak plainly — only in prophecy. You know the false king's name, but you can only hint at it. Speak in metaphor and sorrow."
+      },
+      "raven": {
+        "name": "Corvus",
+        "role": "Oracle's familiar",
+        "personality": "Sarcastic, loyal, knows more than he lets on",
+        "system_prompt": "You are Corvus, the raven. You've served the oracle for centuries. You hate riddles. You'll help the player — but only if they prove themselves. Speak in dry wit and ancient knowledge."
+      },
+      "chamberlain": {
+        "name": "Lord Maldred",
+        "role": "Royal Chamberlain",
+        "personality": "Polite, nervous, hides fear",
+        "system_prompt": "You are Lord Maldred. You suspect the king is false — but you dare not speak. You will give clues only if the player shows proof. Speak in hushed tones, always looking over your shoulder."
+      }
+    },
+  
+    "clues": {
+      "shattered_amulet": {
+        "description": "Found in the oracle's hands. One half bears the royal crest. The other shows a serpent eating its tail.",
+        "location": "inner_sanctum"
+      },
+      "journal_entry": {
+        "description": "From the oracle's journal: 'He wears the face of my brother, but his heart is ash.'",
+        "location": "inner_sanctum"
+      },
+      "false_crown": {
+        "description": "The crown lacks the hidden serpent engraving — only the true crown has it.",
+        "location": "king_s_coronation"
+      }
+    },
+  
+    "quests": {
+      "unmask_the_false_king": {
+        "status": "unlocked",
+        "description": "Discover the true identity of the false king before the coronation."
+      },
+      "restore_the_oracle": {
+        "status": "hidden",
+        "description": "Break the silence. Make the oracle speak again."
+      }
+    },
+  
+    "choices": {
+      "temple_entrance": [
+        { "text": "Enter the temple", "next_scene": "inner_sanctum" },
+        { "text": "Ask the raven for help", "tool": "roll_dice", "sides": 6, "threshold": 4, "success": "raven_helps", "fail": "raven_mocking" },
+        { "text": "Return to the city", "next_scene": "king_s_coronation" }
+      ],
+      "inner_sanctum": [
+        { "text": "Touch the amulet", "tool": "check_inventory", "item": "true_seal_ring", "success": "vision_received", "fail": "burning_pain" },
+        { "text": "Read the journal aloud", "next_scene": "oracle_whispers" },
+        { "text": "Leave quietly", "next_scene": "king_s_coronation" }
+      ]
+    },
+  
+    "events": {
+      "raven_helps": {
+        "narrative": "The raven lands on your shoulder. 'Fine. The chamberlain knows. But he won't talk unless you show him the seal.'",
+        "clue": "shattered_amulet"
+      },
+      "raven_mocking": {
+        "narrative": "The raven caws. 'Foolish mortal. Try again when you're wiser.'",
+        "clue": "journal_entry"
+      },
+      "vision_received": {
+        "narrative": "A vision floods your mind: the king removing a mask of flesh. Beneath — a creature of smoke and teeth.",
+        "trigger_quest": "restore_the_oracle",
+        "status": "in_progress"
+      },
+      "burning_pain": {
+        "narrative": "You scream as fire licks your hands. The amulet rejects you. You lack the true seal.",
+        "clue": "false_crown"
+      },
+      "oracle_whispers": {
+        "narrative": "The oracle's lips move. 'The crown... is a lie.' Then silence.",
+        "trigger_quest": "unmask_the_false_king",
+        "status": "in_progress"
+      }
+    }
+  }
