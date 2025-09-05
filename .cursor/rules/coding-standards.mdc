@@ -3,7 +3,7 @@ description: Use this rule when writing or reviewing Python code to ensure consi
 globs: *.py
 ---
 
-# Python Spy Agency Coding Standards
+# Python Coding Standards
 
 ## Python Code Style
 - Follow PEP 8 style guidelines

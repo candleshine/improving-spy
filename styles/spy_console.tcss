@@ -1,91 +1,86 @@
+/* Color variables */
+$background: #0a0e14;
+$foreground: #b3b1ad;
+$primary: #39BAE6;
+$secondary: #59C2FF;
+$accent: #FF8F40;
+$error: #FF3333;
+$success: #86B300;
+$warning: #FA8D3E;
+
 /* Main screen styling */
 Screen {
-    background: #000000;
-    color: #00ff00;
+    background: $background;
+    color: $foreground;
 }
 
-/* Section title styling */
-.section-title {
-    background: #003300;
-    color: #00ff00;
-    padding: 1;
-    text-align: center;
-    width: 100%;
-}
-
-/* Spy name styling */
-.spy-name {
-    background: #003300;
-    color: #00ff00;
-    width: 100%;
-    text-align: left;
-    padding: 0 1;
-}
-
-.spy-name.selected {
-    background: #00aa00;
-    color: #000000;
-    text-style: bold;
+/* Main application screen */
+#main-screen {
+    layout: vertical;
 }
 
 /* Spy selector */
-#spy-selector {
-    height: auto;
-    margin: 1 0;
-    border: solid green;
+SpySelector {
+    height: 3;
+    dock: top;
+    padding: 0 1;
+    background: $background;
+    border-bottom: solid $primary;
 }
 
-/* Spy list */
-.spy-list {
-    height: auto;
-    border: none;
+SpySelector Label {
+    width: auto;
+    padding: 1 2;
+    color: $foreground;
 }
 
-/* Spy avatar */
-.spy-avatar {
-    background: #003300;
-    color: white;
-    min-width: 4;
-    text-align: center;
-    margin-right: 1;
+SpySelector Select {
+    width: 1fr;
+}
+
+SpySelector Button {
+    width: 15;
 }
 
 /* Chat window */
-#chat-window {
+ChatWindow {
     height: 1fr;
-    border: solid green;
-    margin: 1 0;
-    padding: 0 1;
-    overflow-y: auto;
+    border: solid $primary;
+    padding: 1;
+    background: $background;
+}
+
+ChatWindow > Static {
+    margin-bottom: 1;
 }
 
 /* Input bar */
-#input-bar {
-    height: auto;
-    border: solid green;
-    padding: 1;
-}
-
-/* Message styling */
-.message {
-    margin: 1 0;
+InputBar {
+    height: 3;
+    dock: bottom;
     padding: 0 1;
+    background: $background;
+    border-top: solid $primary;
 }
 
-.message.user {
-    text-align: right;
-    color: #00ff00;
+InputBar Input {
+    width: 1fr;
+    margin-right: 1;
 }
 
-.message.assistant {
-    text-align: left;
-    color: #00aaff;
+InputBar Button {
+    width: 10;
+}
+
+InputBar.disabled {
+    opacity: 0.5;
 }
 
 /* Status bar */
-.status-bar {
-    background: #003300;
-    color: #00ff00;
+#status-bar {
     height: 1;
+    dock: bottom;
+    background: $primary 20%;
+    color: $foreground;
     padding: 0 1;
 }

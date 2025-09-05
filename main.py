@@ -6,9 +6,9 @@ import os
 import json
 import logging
 import asyncio
+import re
 import websockets
 from datetime import datetime
-from typing import List
 from fastapi import FastAPI, WebSocket, Query, HTTPException
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 
@@ -51,6 +51,41 @@ if not os.listdir(SCENARIOS_DIR):
 # --- In-Memory Session Store ---
 # In production, replace with Redis or DB
 sessions = {}
+session_timestamps = {}  # Track when sessions were last active
+SESSION_TIMEOUT = 300  # 5 minutes in seconds
+
+# --- Session Management Functions ---
+async def cleanup_expired_sessions():
+    """Cleanup sessions that have been inactive for longer than SESSION_TIMEOUT"""
+    now = datetime.utcnow().timestamp()
+    expired_sessions = []
+    
+    for session_id, timestamp in session_timestamps.items():
+        if now - timestamp > SESSION_TIMEOUT:
+            expired_sessions.append(session_id)
+    
+    for session_id in expired_sessions:
+        if session_id in sessions:
+            logger.info(f"Removing expired session | session_id={session_id} | inactive_seconds={now - session_timestamps[session_id]:.1f}")
+            del sessions[session_id]
+            del session_timestamps[session_id]
+
+
+def update_session_timestamp(session_id):
+    """Update the last activity timestamp for a session"""
+    session_timestamps[session_id] = datetime.utcnow().timestamp()
+
+
+# --- Periodic Session Cleanup ---
+async def periodic_session_cleanup():
+    """Run session cleanup periodically to remove abandoned sessions"""
+    while True:
+        try:
+            await asyncio.sleep(60)  # Run every minute
+            await cleanup_expired_sessions()
+        except Exception as e:
+            logger.error(f"Error in periodic session cleanup: {e}", exc_info=True)
+
 
 # --- FastAPI App ---
 app = FastAPI(
@@ -58,6 +93,15 @@ app = FastAPI(
     description="A teachable, functional AI RPG engine using Pydantic AI and FastAPI",
     version="0.1.0"
 )
+
+
+# --- Startup Event ---
+@app.on_event("startup")
+async def startup_event():
+    """Start background tasks when the application starts"""
+    # Start the periodic session cleanup task
+    asyncio.create_task(periodic_session_cleanup())
+    logger.info("Started periodic session cleanup task")
 
 # --- Event Parsing ---
 def parse_game_events(text: str):
@@ -99,8 +143,26 @@ def parse_game_events(text: str):
     # Choices
     choice_match = re.search(r"\[CHOICE\]\s*(.+)", text)
     if choice_match:
-        options = [opt.strip().strip('"') for opt in choice_match.group(1).split("/")]
-        events.append({"type": "choice", "options": options})
+        options_text = choice_match.group(1)
+        # Extract options with their numbers if present (e.g., "1. Option One" / "2. Option Two")
+        options = []
+        for opt in options_text.split("/"):
+            opt = opt.strip().strip('"')
+            # Check if option has a number prefix (e.g., "1. Option")
+            number_match = re.match(r"(\d+)\s*\.\s*(.+)", opt)
+            if number_match:
+                option_num = int(number_match.group(1))
+                option_text = number_match.group(2).strip()
+                options.append({"number": option_num, "text": option_text})
+            else:
+                # If no number, add as is
+                options.append({"text": opt})
+                
+        events.append({
+            "type": "choice", 
+            "options": options,
+            "raw_text": options_text
+        })
 
     # Remaining text is narrative
     clean_text = re.sub(r"\[NPC:[^\]]+\][^\n]*", "", text)
@@ -141,12 +203,16 @@ async def play_game(websocket: WebSocket, scenario: str = Query(...)):
 
     # Initialize connection state
     connected = True
+    reconnection_allowed = True
     
     try:
         # Load scenario
         with open(scenario_file, "r") as f:
             scenario_data = json.load(f)
 
+        # Clean up any expired sessions
+        await cleanup_expired_sessions()
+        
         # Initialize or resume session
         if session_id not in sessions:
             logger.info(f"Initializing new session | scenario={scenario}")
@@ -155,22 +221,19 @@ async def play_game(websocket: WebSocket, scenario: str = Query(...)):
                 "history": [],
                 "current_scene": "arrival"
             }
+            
+        # Update session timestamp
+        update_session_timestamp(session_id)
 
+        # For new sessions, send the starting scene
+        if session_id in sessions and "engine" not in sessions[session_id]:
             # Send starting scene with initial prompt
             scene = next(iter(scenario_data["scenes"].values()))
             logger.info(f"Found arrival scene: {scene}")
             if scene:
-                # Send initial system prompt if available
+                # Store system prompt for agent use but don't send to client
                 if "system_prompt" in scenario_data:
-                    system_msg = {
-                        "type": "system",
-                        "text": scenario_data["system_prompt"],
-                        "timestamp": datetime.utcnow().isoformat()
-                    }
-                    await websocket.send_json(system_msg)
-                    logger.info(f"Sent system prompt: {system_msg}")
-                else:
-                    logger.info("No system prompt found in scenario")
+                    logger.info(f"Found system prompt: {scenario_data['system_prompt']}")
                 
                 # Send the first narrative
                 narrative_msg = {
@@ -224,6 +287,9 @@ async def play_game(websocket: WebSocket, scenario: str = Query(...)):
                 if not session:
                     logger.warning(f"Session not found | session_id={session_id}")
                     break
+                    
+                # Update session timestamp on activity
+                update_session_timestamp(session_id)
 
                 # Add src to Python path and import engine
                 import sys
@@ -273,16 +339,128 @@ async def play_game(websocket: WebSocket, scenario: str = Query(...)):
                     break
                 
                 try:
-                    result = await engine.agent.run(user_msg, message_history=history)
+                    # Check for special command patterns
+                    npc_interaction = False
+                    scene_description = False
+                    npc_id = None
+                    scene_query = None
+                    choice_index = None
                     
-                    # Update full message history
-                    if hasattr(result, 'all_messages'):
-                        session["history"] = result.all_messages()
-                        logger.debug(f"Updated history | now {len(result.all_messages())} messages")
+                    # Check for NPC interaction format: @NPC:name message
+                    npc_match = re.match(r'^@NPC:([\w]+)\s+(.+)$', user_msg)
+                    if npc_match:
+                        npc_id = npc_match.group(1)
+                        npc_message = npc_match.group(2)
+                        logger.info(f"Detected direct NPC interaction with {npc_id}: {npc_message}")
+                        npc_interaction = True
+                    
+                    # Check for scene description format: @LOOK message
+                    scene_match = re.match(r'^@LOOK\s+(.+)$', user_msg) or re.match(r'^look\s+(.+)$', user_msg, re.IGNORECASE)
+                    if scene_match:
+                        scene_query = scene_match.group(1)
+                        logger.info(f"Detected scene description request: {scene_query}")
+                        scene_description = True
+                    elif user_msg.lower() in ["look", "look around", "@look", "@look around"]:
+                        scene_query = "look around"
+                        logger.info("Detected general scene description request")
+                        scene_description = True
+                    
+                    # Check for choice selection: @CHOOSE number or just a number
+                    choice_match = re.match(r'^@CHOOSE\s+(\d+)$', user_msg) or re.match(r'^(\d+)$', user_msg)
+                    if choice_match:
+                        try:
+                            choice_index = int(choice_match.group(1)) - 1  # Convert to 0-based index
+                            logger.info(f"Detected choice selection: {choice_index + 1}")
+                        except ValueError:
+                            logger.warning(f"Invalid choice number: {choice_match.group(1)}")
+                            choice_index = None
+                    
+                    if npc_interaction and npc_id:
+                        # Handle direct NPC interaction
+                        logger.info(f"Processing direct interaction with NPC: {npc_id}")
+                        npc_response = await engine.interact_with_npc(npc_id, npc_message, history)
+                        events = [npc_response]
+                        
+                        # Add the interaction to history
+                        if "history" in session:
+                            # Add user message to NPC
+                            session["history"].append({
+                                "role": "user",
+                                "content": f"[To {npc_id}]: {npc_message}"
+                            })
+                            # Add NPC response
+                            session["history"].append({
+                                "role": "assistant",
+                                "content": f"[NPC:{npc_id}] {npc_response['text']}"
+                            })
+                    elif scene_description and scene_query:
+                        # Handle scene description request
+                        logger.info(f"Processing scene description request: {scene_query}")
+                        scene_response = await engine.describe_scene(scene_query, history)
+                        events = [scene_response]
+                        
+                        # Add the interaction to history
+                        if "history" in session:
+                            # Add user query
+                            session["history"].append({
+                                "role": "user",
+                                "content": f"[Looking at]: {scene_query}"
+                            })
+                            # Add scene description
+                            session["history"].append({
+                                "role": "assistant",
+                                "content": f"[Scene]: {scene_response['text']}"
+                            })
+                    elif choice_index is not None:  # Using choice_index directly instead of choice_selection flag
+                        # Handle choice selection
+                        logger.info(f"Processing choice selection: {choice_index + 1}")
+                        try:
+                            # Process the choice
+                            choice_response = await engine.process_choice_selection(choice_index)
+                            events = [choice_response]
+                            
+                            # Add the choice to history
+                            if "history" in session:
+                                # Add user choice
+                                session["history"].append({
+                                    "role": "user",
+                                    "content": f"[Choice]: Option {choice_index + 1}"
+                                })
+                                # Add choice outcome
+                                session["history"].append({
+                                    "role": "assistant",
+                                    "content": f"[Outcome]: {choice_response['text']}"
+                                })
+                                
+                            # If there was a scene transition, get the new scene description
+                            if choice_response.get("next_scene"):
+                                # Add a scene description event
+                                scene_desc = await engine.describe_scene("look around", history)
+                                events.append(scene_desc)
+                                
+                                # Add scene description to history
+                                session["history"].append({
+                                    "role": "assistant",
+                                    "content": f"[Scene]: {scene_desc['text']}"
+                                })
+                        except Exception as e:
+                            logger.error(f"Error processing choice: {e}")
+                            events = [{
+                                "type": "error",
+                                "text": f"Error processing your choice: {str(e)}"
+                            }]
+                    else:
+                        # Normal game master interaction
+                        result = await engine.agent.run(user_msg, message_history=history)
+                        
+                        # Update full message history
+                        if hasattr(result, 'all_messages'):
+                            session["history"] = result.all_messages()
+                            logger.debug(f"Updated history | now {len(result.all_messages())} messages")
 
-                    # Parse and send events
-                    ai_output = result.output if hasattr(result, 'output') else str(result)
-                    events = parse_game_events(ai_output) if ai_output else []
+                        # Parse and send events
+                        ai_output = result.output if hasattr(result, 'output') else str(result)
+                        events = parse_game_events(ai_output) if ai_output else []
 
                     for event in events:
                         # Add timestamp to each event
@@ -316,7 +494,17 @@ async def play_game(websocket: WebSocket, scenario: str = Query(...)):
                     
             except websockets.exceptions.ConnectionClosed as e:
                 logger.info(f"WebSocket connection closed | session_id={session_id} | code={e.code} | reason={e.reason}")
+                # Only set connected to False, but keep the session intact for potential reconnection
                 connected = False
+                
+                # Normal closure (1000) or going away (1001) are expected to reconnect
+                # Other codes might indicate a more serious issue
+                if e.code in (1000, 1001):
+                    logger.info(f"Normal WebSocket closure, allowing reconnection | session_id={session_id}")
+                    reconnection_allowed = True
+                else:
+                    logger.warning(f"Abnormal WebSocket closure, disallowing reconnection | session_id={session_id} | code={e.code}")
+                    reconnection_allowed = False
             except Exception as e:
                 logger.error(f"Unexpected error in game loop | session_id={session_id} | error={str(e)}", exc_info=True)
                 try:
@@ -328,13 +516,24 @@ async def play_game(websocket: WebSocket, scenario: str = Query(...)):
                 except Exception as send_error:
                     logger.error(f"Failed to send error message to client: {send_error}")
                 connected = False
+                # Don't allow reconnection for unexpected errors
+                reconnection_allowed = False
 
     except asyncio.CancelledError:
         logger.info(f"Game session was cancelled | session_id={session_id}")
+        reconnection_allowed = False
     except websockets.exceptions.ConnectionClosed as e:
         logger.info(f"WebSocket connection closed | session_id={session_id} | code={e.code} | reason={e.reason}")
+        # Normal closure (1000) or going away (1001) are expected to reconnect
+        if e.code in (1000, 1001):
+            logger.info(f"Normal WebSocket closure, allowing reconnection | session_id={session_id}")
+            reconnection_allowed = True
+        else:
+            logger.warning(f"Abnormal WebSocket closure, disallowing reconnection | session_id={session_id} | code={e.code}")
+            reconnection_allowed = False
     except Exception as e:
         logger.error(f"Unexpected error in game session | session_id={session_id} | error={str(e)}", exc_info=True)
+        reconnection_allowed = False
         try:
             if not websocket.client_state == websockets.protocol.State.CLOSED:
                 await websocket.send_json({
@@ -349,15 +548,34 @@ async def play_game(websocket: WebSocket, scenario: str = Query(...)):
         cleanup_errors = []
         
         try:
-            # Clean up the session if it exists
+            # Only clean up the session if it exists and we're not expecting a reconnection
+            # For normal WebSocket closures (code 1000), we'll keep the session for potential reconnection
             if session_id in sessions:
+                # Check if we had a normal closure or an error
+                # If we had an error or explicit cleanup request, remove the session
+                # Otherwise, keep it for potential reconnection
+                should_cleanup = not reconnection_allowed
+                
                 try:
-                    # Optionally save session before removing
+                    # Optionally save session before potential removal
                     # await save_game(session_id)
-                    del sessions[session_id]
-                    logger.info(f"Cleaned up session | session_id={session_id}")
+                    
+                    # Keep the session active for 5 minutes to allow for reconnection
+                    # This helps with temporary disconnections and page refreshes
+                    if should_cleanup:
+                        # If we're cleaning up, remove the session completely
+                        del sessions[session_id]
+                        if session_id in session_timestamps:
+                            del session_timestamps[session_id]
+                        logger.info(f"Cleaned up session | session_id={session_id}")
+                    else:
+                        # Otherwise, keep the session but update its timestamp
+                        # It will be automatically cleaned up after SESSION_TIMEOUT seconds of inactivity
+                        logger.info(f"Preserving session for reconnection | session_id={session_id}")
+                        update_session_timestamp(session_id)
                 except Exception as e:
                     cleanup_errors.append(f"session cleanup: {str(e)}")
+
             
             # Close the WebSocket connection if it's still open
             if hasattr(websocket, 'client_state') and websocket.client_state != websockets.protocol.State.CLOSED:
