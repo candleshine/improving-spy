@@ -28,7 +28,7 @@ from src.client.websocket.protocol import (
     Message,
     MessageType,
     UserMessage,
-    create_message_from_json,
+    parse_message_from_json,
 )
 
 
@@ -489,39 +489,23 @@ class WebSocketClient:
                 # Continue anyway since the message was already sent
         except WebSocketException as e:
             logger.error(f"Error sending message: {e}")
-            
-            # Call the on_error callback if provided
             if self.on_error:
                 self.on_error(str(e))
-    
-    async def send_user_message(self, content: str) -> None:
-        """
-        Send a user message to the WebSocket server.
-        
-        Args:
-            content: The message content
-        """
-        message = UserMessage(
-            content=content,
-            agent_id=self.agent_id,
-            conversation_id=self.conversation_id,
-        )
-        
-        await self.send_message(message)
     
     async def _heartbeat_loop(self) -> None:
         """Send periodic heartbeat messages to keep the connection alive."""
         while self.connected and self.websocket:
             try:
-                # Send a ping message
+                # Send a ping to keep the connection alive
                 await self.websocket.ping()
-                logger.debug("Sent heartbeat ping")
+                # logger.debug("Sent heartbeat ping")
                 
                 # Wait for the heartbeat interval
                 await asyncio.sleep(WS_HEARTBEAT_INTERVAL)
                 
             except asyncio.CancelledError:
                 # Task was cancelled, exit gracefully
+                logger.debug("Heartbeat loop cancelled")
                 break
                 
             except WebSocketException as e:
@@ -566,7 +550,7 @@ class WebSocketClient:
                         
                     # Parse the message
                     try:
-                        message = create_message_from_json(message_json)
+                        message = parse_message_from_json(message_json)
                         
                         # Extract and save session information
                         if message.type == MessageType.CHAT and "conversation_id" in message.payload:
@@ -581,20 +565,30 @@ class WebSocketClient:
                                 logger.info(f"Updated session_id from system message: {self.session_id}")
                                 self._save_session()
                         
-                        # Also check for session_id in narrative messages
+                        # Also check for session_id and scene_id in narrative messages
                         if message.type == MessageType.NARRATIVE and isinstance(message.payload, dict):
                             if "session_id" in message.payload:
                                 self.session_id = message.payload["session_id"]
                                 logger.info(f"Updated session_id from narrative: {self.session_id}")
                                 self._save_session()
+                            
+                            # Log scene information if available
+                            if "scene_id" in message.payload:
+                                scene_id = message.payload['scene_id']
+                                logger.info(f"Narrative message for scene: {scene_id}")
+                                # Extract additional scene information if available
+                                if isinstance(message.payload, dict):
+                                    scene_info = message.payload.get('scene_info', {})
+                                    if scene_info:
+                                        logger.info(f"Scene info: {scene_info}")
                         
                         # Log detailed message information
                         logger.info(f"RECEIVED MESSAGE: type={message.type}, message_id={message.message_id}")
+                        
                         logger.debug(f"Message payload: {message.payload}")
                         
                         # Call the on_message callback if provided
                         if self.on_message:
-                            logger.info(f"Forwarding message to handler: type={message.type}, message_id={message.message_id}")
                             self.on_message(message)
                         else:
                             logger.warning(f"No message handler registered for message: type={message.type}, message_id={message.message_id}")

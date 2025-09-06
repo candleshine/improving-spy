@@ -69,7 +69,10 @@ async def summarize_old_messages(
 
     Uses RunContext to access token usage and model info.
     """
-    total_tokens = ctx.usage.total_tokens if hasattr(ctx, 'usage') and ctx.usage else 0
+    # Ensure total_tokens is never None to prevent comparison errors
+    total_tokens = 0
+    if hasattr(ctx, 'usage') and ctx.usage and hasattr(ctx.usage, 'total_tokens'):
+        total_tokens = ctx.usage.total_tokens or 0
     model_name = getattr(ctx, 'model_name', "unknown")
 
     logger.info(

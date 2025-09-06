@@ -27,6 +27,7 @@ class MessageType(str, Enum):
     NARRATIVE = "narrative"
     FUNCTION = "function"
     NPC_SPEAK = "npc_speak"
+    CHOICE = "choice"
 
 
 class SystemMessageLevel(str, Enum):
@@ -57,9 +58,10 @@ class Message:
         self,
         message_type: MessageType,
         payload: Dict[str, Any],
-        message_id: Optional[str] = None,
-        timestamp: Optional[str] = None,
-        client_message_id: Optional[str] = None,
+        timestamp: str = None,
+        message_id: str = None,
+        conversation_id: str = None,
+        agent_id: str = None
     ):
         """
         Initialize a new message.
@@ -67,31 +69,32 @@ class Message:
         Args:
             message_type: The type of message
             payload: The message payload
-            message_id: Unique identifier for the message (server-generated)
-            timestamp: ISO 8601 formatted timestamp (server-generated)
-            client_message_id: Client-generated message ID for tracking
+            timestamp: Optional timestamp (ISO format)
+            message_id: Optional message ID
+            conversation_id: Optional conversation ID
+            agent_id: Optional agent ID
         """
         self.type = message_type
         self.payload = payload
-        self.message_id = message_id
-        self.timestamp = timestamp or datetime.now().isoformat()
-        self.client_message_id = client_message_id or f"client-{uuid.uuid4()}"
+        self.timestamp = timestamp or datetime.utcnow().isoformat()
+        self.message_id = message_id or str(uuid.uuid4())
+        self.conversation_id = conversation_id
+        self.agent_id = agent_id
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert the message to a dictionary for JSON serialization."""
+        """Convert the message to a dictionary."""
         result = {
             "type": self.type,
             "payload": self.payload,
+            "timestamp": self.timestamp,
+            "message_id": self.message_id
         }
         
-        if self.message_id:
-            result["message_id"] = self.message_id
+        if self.conversation_id:
+            result["conversation_id"] = self.conversation_id
             
-        if self.timestamp:
-            result["timestamp"] = self.timestamp
-            
-        if self.client_message_id:
-            result["client_message_id"] = self.client_message_id
+        if self.agent_id:
+            result["agent_id"] = self.agent_id
             
         return result
     
@@ -103,128 +106,47 @@ class Message:
     def from_dict(cls, data: Dict[str, Any]) -> 'Message':
         """Create a message from a dictionary."""
         return cls(
-            message_type=data["type"],
-            payload=data["payload"],
-            message_id=data.get("message_id"),
-            timestamp=data.get("timestamp"),
-            client_message_id=data.get("client_message_id"),
+            message_type=data.get("type", "unknown"),
+            payload=data.get("payload", {}),
+            timestamp=data.get("timestamp", datetime.utcnow().isoformat()),
+            message_id=data.get("message_id", str(uuid.uuid4())),
+            conversation_id=data.get("conversation_id"),
+            agent_id=data.get("agent_id")
         )
     
     @classmethod
     def from_json(cls, json_str: str) -> 'Message':
         """Create a message from a JSON string."""
-        data = json.loads(json_str)
-        return cls.from_dict(data)
-
-
-class OutgoingMessage(Message):
-    """Generic message sent from the client to the server."""
-    
-    def __init__(
-        self,
-        type: MessageType,
-        payload: Dict[str, Any],
-        client_message_id: Optional[str] = None,
-    ):
-        """
-        Initialize a new outgoing message.
-        
-        Args:
-            type: The type of message
-            payload: The message payload
-            client_message_id: Client-generated message ID for tracking
-        """
-        super().__init__(
-            message_type=type,
-            payload=payload,
-            client_message_id=client_message_id,
-        )
-
-
-class UserMessage(Message):
-    """Message sent from the user to the agent."""
-    
-    def __init__(
-        self,
-        content: str,
-        agent_id: str,
-        conversation_id: Optional[str] = None,
-        client_message_id: Optional[str] = None,
-    ):
-        """
-        Initialize a new user message.
-        
-        Args:
-            content: The message content
-            agent_id: The ID of the agent to send the message to
-            conversation_id: The ID of the conversation
-            client_message_id: Client-generated message ID for tracking
-        """
-        payload = {
-            "content": content,
-            "agent_id": agent_id,
-            "metadata": {
-                "client_timestamp": datetime.now().isoformat(),
-                "client_info": {
-                    "version": "1.0.0",
-                    "platform": "terminal"
-                }
-            }
-        }
-        
-        if conversation_id:
-            payload["conversation_id"] = conversation_id
-            
-        super().__init__(
-            message_type=MessageType.USER_MESSAGE,
-            payload=payload,
-            client_message_id=client_message_id,
-        )
-
-
-class CommandMessage(Message):
-    """Command message sent from the client to the server."""
-    
-    def __init__(
-        self,
-        command: str,
-        parameters: Dict[str, Any],
-        client_message_id: Optional[str] = None,
-    ):
-        """
-        Initialize a new command message.
-        
-        Args:
-            command: The command to execute
-            parameters: Parameters for the command
-            client_message_id: Client-generated message ID for tracking
-        """
-        payload = {
-            "command": command,
-            "parameters": parameters,
-        }
-        
-        super().__init__(
-            message_type=MessageType.COMMAND,
-            payload=payload,
-            client_message_id=client_message_id,
-        )
+        return cls.from_dict(json.loads(json_str))
 
 
 class ChatMessage(Message):
-    """Chat message received from the agent."""
+    """Message containing chat content."""
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'ChatMessage':
         """Create a chat message from a dictionary."""
-        if data["type"] != MessageType.CHAT:
-            raise ValueError(f"Expected message type {MessageType.CHAT}, got {data['type']}")
+        from src.client.logger import logger
         
-        return super().from_dict(data)
+        logger.debug(f"ChatMessage.from_dict called with data: {data}")
+        
+        try:
+            if data["type"] != MessageType.CHAT:
+                logger.error(f"Type mismatch in ChatMessage.from_dict: expected {MessageType.CHAT}, got {data['type']}")
+                raise ValueError(f"Expected message type {MessageType.CHAT}, got {data['type']}")
+            
+            return super().from_dict(data)
+        except KeyError as e:
+            logger.error(f"KeyError in ChatMessage.from_dict: {e}")
+            logger.error(f"Available keys: {data.keys()}")
+            raise
+        except Exception as e:
+            logger.error(f"Error in ChatMessage.from_dict: {e}")
+            raise
 
 
 class SystemMessage(Message):
-    """System message for notifications about the system state."""
+    """System message for notifications and status updates."""
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'SystemMessage':
@@ -238,17 +160,17 @@ class SystemMessage(Message):
                 logger.error(f"Type mismatch in SystemMessage.from_dict: expected {MessageType.SYSTEM}, got {data['type']}")
                 raise ValueError(f"Expected message type {MessageType.SYSTEM}, got {data['type']}")
             
-            # Handle different system message formats
-            # Format 1: {"type":"system","text":"Message content"}
-            # Format 2: {"type":"system","payload":{"content":"Message content", "level":"info"}}
+            # Handle system message format
+            # Format 1: {"type":"system","text":"System message","level":"info"}
+            # Format 2: {"type":"system","payload":{"content":"System message","level":"info"}}
             
             # If the message has a 'text' field but no 'payload', convert it to the expected format
             if 'text' in data and 'payload' not in data:
                 logger.info(f"Converting system message format: found 'text' field: {data['text'][:100]}")
-                # Create a payload with the text content
+                # Create a payload with the text content and level
                 data['payload'] = {
                     'content': data['text'],
-                    'level': 'info'  # Default to info level
+                    'level': data.get('level', 'info')
                 }
                 logger.info(f"Converted system message payload: {data['payload']}")
             
@@ -266,79 +188,173 @@ class SystemMessage(Message):
 
 
 class TypingMessage(Message):
-    """Typing indicator message."""
+    """Message indicating typing status."""
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'TypingMessage':
         """Create a typing message from a dictionary."""
-        if data["type"] != MessageType.TYPING:
-            raise ValueError(f"Expected message type {MessageType.TYPING}, got {data['type']}")
+        from src.client.logger import logger
         
-        return super().from_dict(data)
+        logger.debug(f"TypingMessage.from_dict called with data: {data}")
+        
+        try:
+            if data["type"] != MessageType.TYPING:
+                logger.error(f"Type mismatch in TypingMessage.from_dict: expected {MessageType.TYPING}, got {data['type']}")
+                raise ValueError(f"Expected message type {MessageType.TYPING}, got {data['type']}")
+            
+            return super().from_dict(data)
+        except KeyError as e:
+            logger.error(f"KeyError in TypingMessage.from_dict: {e}")
+            logger.error(f"Available keys: {data.keys()}")
+            raise
+        except Exception as e:
+            logger.error(f"Error in TypingMessage.from_dict: {e}")
+            raise
 
 
 class MissionMessage(Message):
-    """Mission update message."""
+    """Message containing mission information."""
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'MissionMessage':
         """Create a mission message from a dictionary."""
-        if data["type"] != MessageType.MISSION:
-            raise ValueError(f"Expected message type {MessageType.MISSION}, got {data['type']}")
+        from src.client.logger import logger
         
-        return super().from_dict(data)
+        logger.debug(f"MissionMessage.from_dict called with data: {data}")
+        
+        try:
+            if data["type"] != MessageType.MISSION:
+                logger.error(f"Type mismatch in MissionMessage.from_dict: expected {MessageType.MISSION}, got {data['type']}")
+                raise ValueError(f"Expected message type {MessageType.MISSION}, got {data['type']}")
+            
+            return super().from_dict(data)
+        except KeyError as e:
+            logger.error(f"KeyError in MissionMessage.from_dict: {e}")
+            logger.error(f"Available keys: {data.keys()}")
+            raise
+        except Exception as e:
+            logger.error(f"Error in MissionMessage.from_dict: {e}")
+            raise
 
 
 class AgentsMessage(Message):
-    """Message containing information about available agents."""
+    """Message containing agent information."""
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'AgentsMessage':
         """Create an agents message from a dictionary."""
-        if data["type"] != MessageType.AGENTS:
-            raise ValueError(f"Expected message type {MessageType.AGENTS}, got {data['type']}")
+        from src.client.logger import logger
         
-        return super().from_dict(data)
+        logger.debug(f"AgentsMessage.from_dict called with data: {data}")
+        
+        try:
+            if data["type"] != MessageType.AGENTS:
+                logger.error(f"Type mismatch in AgentsMessage.from_dict: expected {MessageType.AGENTS}, got {data['type']}")
+                raise ValueError(f"Expected message type {MessageType.AGENTS}, got {data['type']}")
+            
+            return super().from_dict(data)
+        except KeyError as e:
+            logger.error(f"KeyError in AgentsMessage.from_dict: {e}")
+            logger.error(f"Available keys: {data.keys()}")
+            raise
+        except Exception as e:
+            logger.error(f"Error in AgentsMessage.from_dict: {e}")
+            raise
 
 
 class StreamMessage(Message):
-    """Streaming message for partial responses."""
+    """Message for streaming content."""
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'StreamMessage':
         """Create a stream message from a dictionary."""
-        if data["type"] != MessageType.STREAM:
-            raise ValueError(f"Expected message type {MessageType.STREAM}, got {data['type']}")
+        from src.client.logger import logger
         
-        return super().from_dict(data)
+        logger.debug(f"StreamMessage.from_dict called with data: {data}")
+        
+        try:
+            if data["type"] != MessageType.STREAM:
+                logger.error(f"Type mismatch in StreamMessage.from_dict: expected {MessageType.STREAM}, got {data['type']}")
+                raise ValueError(f"Expected message type {MessageType.STREAM}, got {data['type']}")
+            
+            return super().from_dict(data)
+        except KeyError as e:
+            logger.error(f"KeyError in StreamMessage.from_dict: {e}")
+            logger.error(f"Available keys: {data.keys()}")
+            raise
+        except Exception as e:
+            logger.error(f"Error in StreamMessage.from_dict: {e}")
+            raise
 
 
 class ErrorMessage(Message):
-    """Error message from the server."""
+    """Error message."""
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'ErrorMessage':
         """Create an error message from a dictionary."""
-        if data["type"] != MessageType.ERROR:
-            raise ValueError(f"Expected message type {MessageType.ERROR}, got {data['type']}")
+        from src.client.logger import logger
         
-        return super().from_dict(data)
+        logger.debug(f"ErrorMessage.from_dict called with data: {data}")
+        
+        try:
+            if data["type"] != MessageType.ERROR:
+                logger.error(f"Type mismatch in ErrorMessage.from_dict: expected {MessageType.ERROR}, got {data['type']}")
+                raise ValueError(f"Expected message type {MessageType.ERROR}, got {data['type']}")
+            
+            # Handle error message format
+            # Format 1: {"type":"error","text":"Error message"}
+            # Format 2: {"type":"error","payload":{"content":"Error message"}}
+            
+            # If the message has a 'text' field but no 'payload', convert it to the expected format
+            if 'text' in data and 'payload' not in data:
+                logger.info(f"Converting error message format: found 'text' field: {data['text'][:100]}")
+                # Create a payload with the text content
+                data['payload'] = {
+                    'content': data['text']
+                }
+                logger.info(f"Converted error message payload: {data['payload']}")
+            
+            logger.debug(f"ErrorMessage payload: {data.get('payload', {})}")
+            result = super().from_dict(data)
+            logger.debug("ErrorMessage created successfully")
+            return result
+        except KeyError as e:
+            logger.error(f"KeyError in ErrorMessage.from_dict: {e}")
+            logger.error(f"Available keys: {data.keys()}")
+            raise
+        except Exception as e:
+            logger.error(f"Error in ErrorMessage.from_dict: {e}")
+            raise
 
 
 class AckMessage(Message):
-    """Acknowledgment message from the server."""
+    """Acknowledgment message."""
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'AckMessage':
         """Create an acknowledgment message from a dictionary."""
-        if data["type"] != MessageType.ACK:
-            raise ValueError(f"Expected message type {MessageType.ACK}, got {data['type']}")
+        from src.client.logger import logger
         
-        return super().from_dict(data)
+        logger.debug(f"AckMessage.from_dict called with data: {data}")
+        
+        try:
+            if data["type"] != MessageType.ACK:
+                logger.error(f"Type mismatch in AckMessage.from_dict: expected {MessageType.ACK}, got {data['type']}")
+                raise ValueError(f"Expected message type {MessageType.ACK}, got {data['type']}")
+            
+            return super().from_dict(data)
+        except KeyError as e:
+            logger.error(f"KeyError in AckMessage.from_dict: {e}")
+            logger.error(f"Available keys: {data.keys()}")
+            raise
+        except Exception as e:
+            logger.error(f"Error in AckMessage.from_dict: {e}")
+            raise
 
 
 class NarrativeMessage(Message):
-    """Narrative message containing story content."""
+    """Narrative message for storytelling."""
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'NarrativeMessage':
@@ -396,26 +412,15 @@ class FunctionMessage(Message):
             
             # Handle function message format
             # Format: {"type":"function","function":{"name":"function_name","parameters":{"param1":"value1"}}}
-            # or: {"type":"function","payload":{"name":"function_name","parameters":{"param1":"value1"}}}
             
             # If the message has a 'function' field but no 'payload', convert it to the expected format
             if 'function' in data and 'payload' not in data:
                 logger.info(f"Converting function message format: found 'function' field")
-                # Create a payload with the function content
-                data['payload'] = data['function']
+                # Create a payload with the function data
+                data['payload'] = {
+                    'function': data['function']
+                }
                 logger.info(f"Converted function message payload: {data['payload']}")
-            
-            # If the message has a 'content' field that contains a JSON string with function data
-            if 'content' in data and isinstance(data['content'], str) and 'payload' not in data:
-                try:
-                    # Try to parse the content as JSON
-                    content_data = json.loads(data['content'])
-                    if isinstance(content_data, dict) and 'function' in content_data:
-                        logger.info(f"Found function data in content field: {content_data['function']}")
-                        data['payload'] = content_data['function']
-                        logger.info(f"Extracted function payload: {data['payload']}")
-                except json.JSONDecodeError:
-                    logger.warning(f"Could not parse content as JSON: {data['content'][:100]}")
             
             logger.debug(f"FunctionMessage payload: {data.get('payload', {})}")
             result = super().from_dict(data)
@@ -446,19 +451,18 @@ class NPCSpeakMessage(Message):
                 raise ValueError(f"Expected message type {MessageType.NPC_SPEAK}, got {data['type']}")
             
             # Handle NPC message format
-            # Format: {"type":"npc_speak","name":"NPC Name","text":"NPC dialogue"}
+            # Format 1: {"type":"npc_speak","name":"NPC Name","text":"Dialogue"}
+            # Format 2: {"type":"npc_speak","payload":{"name":"NPC Name","content":"Dialogue"}}
             
-            # If the message has direct fields but no 'payload', convert it to the expected format
-            if 'name' in data and 'text' in data and 'payload' not in data:
-                logger.info(f"Converting NPC message format: found direct fields")
-                # Create a payload with the NPC content
+            # If the message has 'name' and 'text' fields but no 'payload', convert it to the expected format
+            if 'text' in data and 'payload' not in data:
+                logger.info(f"Converting NPC speak message format: found 'text' field: {data['text'][:100]}")
+                # Create a payload with the text content and name
                 data['payload'] = {
-                    'name': data['name'],
-                    'text': data['text'],
-                    'npc_id': data.get('npc_id', data['name'].lower()),
-                    'format': 'markdown'  # Default to markdown for better formatting
+                    'content': data['text'],
+                    'name': data.get('name', 'Unknown NPC')
                 }
-                logger.info(f"Converted NPC message payload: {data['payload']}")
+                logger.info(f"Converted NPC speak message payload: {data['payload']}")
             
             logger.debug(f"NPCSpeakMessage payload: {data.get('payload', {})}")
             result = super().from_dict(data)
@@ -473,9 +477,102 @@ class NPCSpeakMessage(Message):
             raise
 
 
-def create_message_from_json(json_str: str) -> Message:
+class ChoiceMessage(Message):
+    """Message representing a set of choices for the player."""
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ChoiceMessage':
+        """Create a ChoiceMessage from a dictionary."""
+        from src.client.logger import logger
+        
+        logger.debug(f"ChoiceMessage.from_dict called with data: {data}")
+        
+        try:
+            if data["type"] != MessageType.CHOICE:
+                logger.error(f"Type mismatch in ChoiceMessage.from_dict: expected {MessageType.CHOICE}, got {data['type']}")
+                raise ValueError(f"Expected message type {MessageType.CHOICE}, got {data['type']}")
+            
+            # Handle choice message format
+            # Format: {"type":"choice","options":[{"text":"Option 1"},{"text":"Option 2"}],"raw_text":"Option 1 / Option 2"}
+            
+            # If the message has 'options' field but no 'payload', convert it to the expected format
+            if 'options' in data and 'payload' not in data:
+                logger.info(f"Converting choice message format: found 'options' field with {len(data['options'])} options")
+                # Create a payload with the options and raw text
+                data['payload'] = {
+                    'options': data['options'],
+                    'raw_text': data.get('raw_text', '')
+                }
+                logger.info(f"Converted choice message payload: {data['payload']}")
+            
+            logger.debug(f"ChoiceMessage payload: {data.get('payload', {})}")
+            result = super().from_dict(data)
+            logger.debug("ChoiceMessage created successfully")
+            return result
+        except KeyError as e:
+            logger.error(f"KeyError in ChoiceMessage.from_dict: {e}")
+            logger.error(f"Available keys: {data.keys()}")
+            raise
+        except Exception as e:
+            logger.error(f"Error in ChoiceMessage.from_dict: {e}")
+            raise
+
+
+class UserMessage:
+    """Message sent from the client to the server."""
+    
+    def __init__(
+        self,
+        content: str,
+        agent_id: str = None,
+        conversation_id: str = None,
+        message_id: str = None,
+        timestamp: str = None
+    ):
+        """
+        Initialize a new user message.
+        
+        Args:
+            content: The message content
+            agent_id: Optional agent ID
+            conversation_id: Optional conversation ID
+            message_id: Optional message ID
+            timestamp: Optional timestamp (ISO format)
+        """
+        self.type = MessageType.USER_MESSAGE
+        self.content = content
+        self.agent_id = agent_id
+        self.conversation_id = conversation_id
+        self.message_id = message_id or f"client-{uuid.uuid4()}"
+        self.timestamp = timestamp or datetime.utcnow().isoformat()
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the message to a dictionary."""
+        result = {
+            "type": self.type,
+            "payload": {
+                "content": self.content
+            },
+            "timestamp": self.timestamp,
+            "client_message_id": self.message_id
+        }
+        
+        if self.agent_id:
+            result["payload"]["agent_id"] = self.agent_id
+            
+        if self.conversation_id:
+            result["payload"]["conversation_id"] = self.conversation_id
+            
+        return result
+    
+    def to_json(self) -> str:
+        """Convert the message to a JSON string."""
+        return json.dumps(self.to_dict())
+
+
+def parse_message_from_json(json_str: str) -> Message:
     """
-    Create the appropriate message subclass from a JSON string.
+    Parse a JSON string into a Message object.
     
     Args:
         json_str: JSON string representing a message
@@ -541,6 +638,9 @@ def create_message_from_json(json_str: str) -> Message:
         elif message_type == MessageType.NPC_SPEAK:
             logger.debug("Creating NPCSpeakMessage")
             return NPCSpeakMessage.from_dict(data)
+        elif message_type == MessageType.CHOICE:
+            logger.debug("Creating ChoiceMessage")
+            return ChoiceMessage.from_dict(data)
         else:
             logger.warning(f"Unknown message type: '{message_type}', creating generic Message")
             return Message.from_dict(data)

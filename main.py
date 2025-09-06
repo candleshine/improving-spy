@@ -378,7 +378,7 @@ async def play_game(websocket: WebSocket, scenario: str = Query(...)):
                     if npc_interaction and npc_id:
                         # Handle direct NPC interaction
                         logger.info(f"Processing direct interaction with NPC: {npc_id}")
-                        npc_response = await engine.interact_with_npc(npc_id, npc_message, history)
+                        npc_response = await engine.interact_with_npc(npc_id, npc_message, history, websocket)
                         events = [npc_response]
                         
                         # Add the interaction to history
@@ -396,7 +396,28 @@ async def play_game(websocket: WebSocket, scenario: str = Query(...)):
                     elif scene_description and scene_query:
                         # Handle scene description request
                         logger.info(f"Processing scene description request: {scene_query}")
-                        scene_response = await engine.describe_scene(scene_query, history)
+                        scene_response = await engine.describe_scene(scene_query, history, websocket)
+                        logger.debug(f"Scene description response: {scene_response}")
+                        
+                        # Ensure the scene response has the required fields
+                        if not isinstance(scene_response, dict):
+                            logger.error(f"Invalid scene response type: {type(scene_response)}")
+                            scene_response = {
+                                "type": "narrative",
+                                "text": "Error retrieving scene description."
+                            }
+                        
+                        # Make sure the scene response has a timestamp
+                        scene_response["timestamp"] = datetime.utcnow().isoformat()
+                        
+                        # Send the scene description directly to ensure it reaches the client
+                        try:
+                            await websocket.send_json(scene_response)
+                            logger.info(f"Sent scene description directly | scene_query={scene_query}")
+                        except Exception as e:
+                            logger.error(f"Failed to send scene description: {e}")
+                            
+                        # Also include in events for history tracking
                         events = [scene_response]
                         
                         # Add the interaction to history
@@ -416,7 +437,7 @@ async def play_game(websocket: WebSocket, scenario: str = Query(...)):
                         logger.info(f"Processing choice selection: {choice_index + 1}")
                         try:
                             # Process the choice
-                            choice_response = await engine.process_choice_selection(choice_index)
+                            choice_response = await engine.process_choice_selection(choice_index, websocket)
                             events = [choice_response]
                             
                             # Add the choice to history
@@ -435,7 +456,7 @@ async def play_game(websocket: WebSocket, scenario: str = Query(...)):
                             # If there was a scene transition, get the new scene description
                             if choice_response.get("next_scene"):
                                 # Add a scene description event
-                                scene_desc = await engine.describe_scene("look around", history)
+                                scene_desc = await engine.describe_scene("look around", history, websocket)
                                 events.append(scene_desc)
                                 
                                 # Add scene description to history

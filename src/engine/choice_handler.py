@@ -99,10 +99,35 @@ class ChoiceHandler:
         
         # Simple scene transition
         if choice.next_scene and not choice.tool:
+            message = f"You chose to {choice.text.lower()}."
+            
+            # Check if this scene transition is to an event that might trigger a quest
+            event = self.events.get(choice.next_scene, {})
+            if event:
+                # Use the event narrative if available
+                if "narrative" in event:
+                    message = event.get("narrative")
+                
+                # Check for clues in the event
+                clue_id = event.get("clue")
+                if clue_id:
+                    clue = self.scenario_data.get("clues", {}).get(clue_id, {})
+                    if clue:
+                        message += f"\n\n[CLUE:{clue_id}] \"{clue.get('description', '')}\""
+                
+                # Check for quest updates in the event
+                quest_id = event.get("trigger_quest")
+                quest_status = event.get("status")
+                if quest_id and quest_status:
+                    quest = self.scenario_data.get("quests", {}).get(quest_id, {})
+                    if quest:
+                        message += f"\n\n[QUEST:{quest_id}] Status: {quest_status} - {quest.get('description', '')}"
+            
             return ChoiceOutcome(
                 success=True,
                 next_scene=choice.next_scene,
-                message=f"You chose to {choice.text.lower()}.",
+                message=message,
+                event_id=choice.next_scene if choice.next_scene in self.events else None
             )
             
         # Tool-based choice
@@ -162,6 +187,14 @@ class ChoiceHandler:
             if clue:
                 message += f"\n\n[CLUE:{clue_id}] \"{clue.get('description', '')}\""
         
+        # Check if this event triggers or updates a quest
+        quest_id = event.get("trigger_quest")
+        quest_status = event.get("status")
+        if quest_id and quest_status:
+            quest = self.scenario_data.get("quests", {}).get(quest_id, {})
+            if quest:
+                message += f"\n\n[QUEST:{quest_id}] Status: {quest_status} - {quest.get('description', '')}"
+        
         return ChoiceOutcome(
             success=success,
             next_scene=event.get("next_scene"),
@@ -184,6 +217,21 @@ class ChoiceHandler:
                 message = f"You use the {required_item}."
             else:
                 message = f"You don't have the {required_item}."
+        
+        # Check if this event gives a clue
+        clue_id = event.get("clue")
+        if clue_id:
+            clue = self.scenario_data.get("clues", {}).get(clue_id, {})
+            if clue:
+                message += f"\n\n[CLUE:{clue_id}] \"{clue.get('description', '')}\""
+        
+        # Check if this event triggers or updates a quest
+        quest_id = event.get("trigger_quest")
+        quest_status = event.get("status")
+        if quest_id and quest_status:
+            quest = self.scenario_data.get("quests", {}).get(quest_id, {})
+            if quest:
+                message += f"\n\n[QUEST:{quest_id}] Status: {quest_status} - {quest.get('description', '')}"
         
         return ChoiceOutcome(
             success=has_item,

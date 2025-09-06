@@ -48,6 +48,7 @@ class WindowChatMessage:
         is_markdown: bool = False,
         is_system: bool = False,
         is_error: bool = False,
+        is_choice: bool = False,
     ):
         """
         Initialize a new chat message.
@@ -68,6 +69,7 @@ class WindowChatMessage:
         self.is_markdown = is_markdown
         self.is_system = is_system
         self.is_error = is_error
+        self.is_choice = is_choice
         
     def format_timestamp(self) -> str:
         """Format the timestamp for display."""
@@ -87,6 +89,28 @@ class WindowChatMessage:
             text.stylize(f"bold {COLORS['accent']}")
             
         return text
+
+    def get_formatted_message(self) -> str:
+        """Get the fully formatted message for display in the chat window."""
+        timestamp = self.format_timestamp()
+        
+        if self.is_system:
+            if self.is_error:
+                return f"[{timestamp}] [red]{self.content}[/red]"
+            else:
+                return f"[{timestamp}] [dim]{self.content}[/dim]"
+        
+        if self.is_choice:
+            # Apply special styling for choice messages
+            return f"[{timestamp}] [bold blue]CHOICES:[/bold blue]\n{self.content}"
+        
+        sender_color = COLORS.get(self.sender, "cyan")
+        sender_display = f"[{sender_color}]{self.sender}[/{sender_color}]"
+        
+        if self.is_markdown:
+            return f"[{timestamp}] {sender_display}:\n{self.content}"
+        else:
+            return f"[{timestamp}] {sender_display}: {self.content}"
 
 
 class ChatWindow(ScrollableContainer):
@@ -418,3 +442,31 @@ class ChatWindow(ScrollableContainer):
             logger.debug(f"Error message content: {content}")
             logger.info("Adding error message to display")
             self.add_error_message(content)
+            
+        elif message.type == MessageType.CHOICE:
+            options = message.payload.get("options", [])
+            raw_text = message.payload.get("raw_text", "")
+            
+            logger.info(f"Processing choice message with {len(options)} options")
+            logger.debug(f"Choice options: {options}")
+            
+            # Format the choices as a markdown list with numbers
+            choice_text = "**Choose an option:**\n\n"
+            for i, option in enumerate(options, 1):
+                option_text = option.get("text", f"Option {i}")
+                choice_text += f"{i}. {option_text}\n"
+            
+            # Add a hint about how to select options
+            choice_text += "\n*Type the number to select an option*"
+            
+            message_obj = WindowChatMessage(
+                content=choice_text,
+                sender="Choices",
+                timestamp=datetime.now(),
+                message_id=message.message_id or f"choice-{len(self.messages)}",
+                is_markdown=True,
+                is_choice=True,  # Mark as a choice message for special styling
+            )
+            
+            logger.info(f"Adding choice message to display: message_id={message_obj.message_id}")
+            self.add_message(message_obj)

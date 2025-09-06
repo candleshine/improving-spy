@@ -35,5 +35,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 py-modules = ["main"]
 
+[tool.uv]
+dev-dependencies = [
+    "pytest-asyncio>=1.1.0",
+]
+
 [project.scripts]
 improving-spy = "main:main"

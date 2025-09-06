@@ -43,6 +43,7 @@ class MessageHandler:
             MessageType.ACK: [],
             MessageType.FUNCTION: [],
             MessageType.NPC_SPEAK: [],
+            MessageType.NARRATIVE: [],  # Add handler for narrative messages
         }
         
     def register_handler(self, message_type: MessageType, handler: Callable[[Message], None]) -> None:

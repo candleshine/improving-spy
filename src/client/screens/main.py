@@ -22,7 +22,6 @@ from src.client.websocket.protocol import (
     Message,
     MessageType,
     NarrativeMessage,
-    OutgoingMessage,
     SystemMessage,
     TypingMessage,
 )
@@ -160,15 +159,16 @@ class MainScreen(Screen):
         # Send the message to the WebSocket server
         if self.ws_client:
             logger.info(f"Creating outgoing message for agent_id={self.agent_id}")
-            outgoing_message = OutgoingMessage(
-                type=MessageType.CHAT,
+            outgoing_message = Message(
+                message_type=MessageType.CHAT,
                 payload={
                     "content": message,
                     "agent_id": self.agent_id,
-                },
+                }
             )
             
-            logger.info(f"MAIN SCREEN: Sending message: type={outgoing_message.type}, message_id={outgoing_message.message_id}")
+            # Access the message type correctly
+            logger.info(f"MAIN SCREEN: Sending message: type={MessageType.CHAT}, message_id={outgoing_message.message_id}")
             logger.debug(f"Outgoing message payload: {outgoing_message.payload}")
             
             logger.info("Creating async task to send message")
@@ -233,6 +233,11 @@ class MainScreen(Screen):
         logger.debug("Registering NPC_SPEAK message handler")
         self.message_handler.register_handler(
             MessageType.NPC_SPEAK, self.handle_npc_speak_message
+        )
+        
+        logger.debug("Registering CHOICE message handler")
+        self.message_handler.register_handler(
+            MessageType.CHOICE, self.handle_choice_message
         )
         
         # Create the WebSocket client
@@ -388,6 +393,21 @@ class MainScreen(Screen):
         
         # Add the message to the chat window
         logger.info(f"Forwarding error message to chat window: message_id={message.message_id}")
+        self.chat_window.handle_websocket_message(message)
+        
+    def handle_choice_message(self, message: Message) -> None:
+        """
+        Handle choice messages.
+        
+        Args:
+            message: The choice message
+        """
+        # Log the choice message
+        logger.info(f"MAIN SCREEN: Handling choice message: message_id={message.message_id}")
+        logger.debug(f"Choice message payload: {message.payload}")
+        
+        # Add the message to the chat window
+        logger.info(f"Forwarding choice message to chat window: message_id={message.message_id}")
         self.chat_window.handle_websocket_message(message)
         
     def handle_narrative_message(self, message: NarrativeMessage) -> None:
