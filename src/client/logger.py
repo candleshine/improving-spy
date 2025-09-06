@@ -26,6 +26,11 @@ def setup_logger(name: str = "spy_console", log_file: Optional[Path] = None) -> 
     """
     logger = logging.getLogger(name)
     
+    # If the logger already has handlers, assume it's configured and return it
+    # This prevents duplicate handlers being added when the function is called multiple times
+    if logger.hasHandlers():
+        return logger
+    
     # Set the log level based on the config
     level = getattr(logging, LOG_LEVEL)
     logger.setLevel(level)
