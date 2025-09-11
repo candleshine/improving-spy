@@ -56,6 +56,7 @@ class WebSocketClient:
         on_error: Optional[Callable[[str], None]] = None,
         session_id: Optional[str] = None,
         auto_reconnect: bool = True,
+        deduplicate_messages: bool = True,
     ):
         """
         Initialize a new WebSocket client.
@@ -80,6 +81,11 @@ class WebSocketClient:
         self.reconnect_task = None
         self.heartbeat_task = None
         self.receive_task = None
+        
+        # Message deduplication settings
+        self.deduplicate_messages = deduplicate_messages
+        self.recent_message_ids = set()  # Track recently seen message IDs
+        self.message_deduplication_window = 100  # Maximum number of message IDs to track
         
         # Session management
         self.session_id = session_id
@@ -587,11 +593,29 @@ class WebSocketClient:
                         
                         logger.debug(f"Message payload: {message.payload}")
                         
-                        # Call the on_message callback if provided
-                        if self.on_message:
+                        # Check for duplicate messages if deduplication is enabled
+                        is_duplicate = False
+                        if self.deduplicate_messages and hasattr(message, 'message_id') and message.message_id:
+                            if message.message_id in self.recent_message_ids:
+                                logger.info(f"Detected duplicate message: type={message.type}, message_id={message.message_id}")
+                                is_duplicate = True
+                            else:
+                                # Add to recent messages and maintain window size
+                                self.recent_message_ids.add(message.message_id)
+                                if len(self.recent_message_ids) > self.message_deduplication_window:
+                                    # Remove oldest entries when we exceed the window
+                                    # This is a simplification; ideally we'd track timestamps
+                                    # and remove the oldest by time, not just randomly
+                                    while len(self.recent_message_ids) > self.message_deduplication_window * 0.8:
+                                        self.recent_message_ids.pop()
+                        
+                        # Call the on_message callback if provided and not a duplicate
+                        if self.on_message and not is_duplicate:
                             self.on_message(message)
-                        else:
+                        elif not self.on_message:
                             logger.warning(f"No message handler registered for message: type={message.type}, message_id={message.message_id}")
+                        elif is_duplicate:
+                            logger.debug(f"Skipping duplicate message: type={message.type}, message_id={message.message_id}")
                             
                     except json.JSONDecodeError as e:
                         logger.error(f"Error parsing message: {e}")

@@ -411,6 +411,99 @@ async def test_comprehensive_message_flow():
     print("\n✓ Comprehensive message flow test passed!")
 
 
+@pytest.mark.asyncio
+async def test_malformed_json_in_narrative():
+    """Test handling of narrative messages containing malformed JSON responses."""
+    print("\n=== Testing Malformed JSON in Narrative Messages ===\n")
+    
+    # Create a mock client
+    mock_client = MockWebSocketClient()
+    
+    # Create a sample narrative message with malformed JSON
+    narrative_with_json_json = json.dumps({
+        "type": "narrative",
+        "message_id": "test-malformed-json-1",
+        "timestamp": "2025-09-06T11:10:27Z",
+        "payload": {
+            "content": "</think>\n\n{\"type\": \"response\", \"payload\": {\"content\": \"Here's a dadjoke for you: Why don't scientists trust atoms? Because they make up everything! 🧪😄\"}, \"timestamp\": \"2025-09-06T16:09:39.131327\", \"message_id\": \"aa66c46b-23c3-47d1-962a-9206b7c8364c\"}",
+            "format": "markdown"
+        }
+    })
+    
+    # Parse and process the message
+    message = parse_message_from_json(narrative_with_json_json)
+    mock_client.on_message(message)
+    
+    # Verify the message was processed correctly
+    narrative_messages = mock_client.get_narrative_messages()
+    assert len(narrative_messages) == 1, "Expected 1 narrative message"
+    assert narrative_messages[0].type == MessageType.NARRATIVE, "Expected message type to be NARRATIVE"
+    assert narrative_messages[0].message_id == "test-malformed-json-1", "Expected message ID to be test-malformed-json-1"
+    
+    # Check that the content contains the embedded JSON
+    payload = narrative_messages[0].payload
+    assert isinstance(payload, dict), "Expected payload to be a dictionary"
+    assert "content" in payload, "Expected payload to contain 'content'"
+    assert "dadjoke" in payload["content"], "Expected content to contain the dadjoke"
+    
+    print("✓ Malformed JSON in narrative message handling test passed!")
+
+
+@pytest.mark.asyncio
+async def test_duplicate_system_messages():
+    """Test handling of duplicate system messages."""
+    print("\n=== Testing Duplicate System Messages Handling ===\n")
+    
+    # Create a mock client with a custom message handler to track duplicates
+    class DuplicateTrackingClient(MockWebSocketClient):
+        def __init__(self):
+            super().__init__()
+            self.system_messages = []
+            self.message_ids_seen = set()
+            self.duplicate_count = 0
+            
+        def on_message(self, message: Message):
+            super().on_message(message)
+            
+            if message.type == MessageType.SYSTEM:
+                self.system_messages.append(message)
+                
+                # Check if this is a duplicate message ID
+                if message.message_id in self.message_ids_seen:
+                    self.duplicate_count += 1
+                    logger.info(f"Detected duplicate message ID: {message.message_id}")
+                else:
+                    self.message_ids_seen.add(message.message_id)
+    
+    mock_client = DuplicateTrackingClient()
+    
+    # Create a system message
+    system_json = json.dumps({
+        "type": "system",
+        "message_id": "test-system-1",
+        "timestamp": "2025-09-06T10:47:52Z",
+        "payload": {
+            "content": "What would you like to do?",
+            "level": "info"
+        }
+    })
+    
+    # Parse and process the message twice to simulate duplicate
+    message = parse_message_from_json(system_json)
+    mock_client.on_message(message)
+    mock_client.on_message(message)  # Send the same message again
+    
+    # Verify the duplicate was detected
+    assert mock_client.duplicate_count == 1, "Expected 1 duplicate message"
+    assert len(mock_client.system_messages) == 2, "Expected 2 system messages (original + duplicate)"
+    
+    # Both messages should have the same content
+    assert mock_client.system_messages[0].payload["content"] == "What would you like to do?"
+    assert mock_client.system_messages[1].payload["content"] == "What would you like to do?"
+    
+    print("✓ Duplicate system messages handling test passed!")
+
+
 async def main():
     """Run all tests."""
     await test_narrative_message_handling()
@@ -419,6 +512,8 @@ async def main():
     await test_quest_message_handling()
     await test_choice_message_handling()
     await test_comprehensive_message_flow()
+    await test_malformed_json_in_narrative()
+    await test_duplicate_system_messages()
 
 if __name__ == "__main__":
     asyncio.run(main())

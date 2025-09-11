@@ -5,6 +5,7 @@ Provides rich narrative descriptions for scenes and choices.
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.ollama import OllamaProvider
+from .structured_output import narrative_output
 from typing import Dict, Any
 import logging
 
@@ -32,10 +33,11 @@ class SceneDescriber:
                 provider=OllamaProvider(base_url='http://localhost:11434/v1'),
             )
             
-            # Create a dedicated agent for scene descriptions
+            # Create a dedicated agent for scene descriptions with structured output
             SceneDescriber.agent = Agent(
                 model=model,
                 system_prompt=self._get_system_prompt(),
+                output_type=narrative_output  # Use ToolOutput for structured responses
             )
     
     def _get_system_prompt(self) -> str:
@@ -130,6 +132,7 @@ Your ultimate goal is to make the player feel physically and emotionally present
             scene_context["items"] = scene_data["items"]
             
         # Create a more detailed prompt for the AI
+        logger.info(f"Base narrative: {base_narrative}, scene context: {scene_context}")
         prompt = f"""
 Scene: {scene_name}
 
@@ -204,27 +207,31 @@ Write in second person perspective to increase immersion.
 """
         
         try:
-            # Run the agent to get an enhanced description
+            # Run the agent to get an enhanced description with structured output
             logger.info(f"Generating enhanced description for: {user_input}")
             
             # Add retry logic for more reliable generation
             max_retries = 2
             retry_count = 0
-            enhanced_description = None
+            response = None
             
-            while retry_count <= max_retries and not enhanced_description:
+            while retry_count <= max_retries and not response:
                 try:
                     result = await SceneDescriber.agent.run(prompt)
-                    enhanced_description = result.output if hasattr(result, 'output') else str(result)
+                    # With ToolOutput, result.output will be a NarrativeResponse object
+                    response = result.output
+                    
+                    # Access the text field of the NarrativeResponse
+                    enhanced_description = response.text
                     
                     # Validate the description has sufficient quality
                     if len(enhanced_description) < 100:  # Too short
                         logger.warning(f"Generated description too short ({len(enhanced_description)} chars), retrying...")
-                        enhanced_description = None
+                        response = None
                         retry_count += 1
                     elif enhanced_description.count('.') < 3:  # Too few sentences
                         logger.warning("Generated description has too few sentences, retrying...")
-                        enhanced_description = None
+                        response = None
                         retry_count += 1
                     else:
                         # Good quality description
@@ -235,9 +242,11 @@ Write in second person perspective to increase immersion.
                     retry_count += 1
             
             # If we still don't have a good description after retries, use a fallback
-            if not enhanced_description:
+            if not response:
                 logger.warning("Failed to generate quality description after retries, using fallback")
-                enhanced_description = f"As you look around {scene_name}, you notice {base_narrative}"
+                # Create a fallback NarrativeResponse
+                fallback_text = f"As you look around {scene_name}, you notice {base_narrative}"
+                return fallback_text
             
             logger.info(f"Generated enhanced description: {enhanced_description[:50]}...")
             return enhanced_description
@@ -338,27 +347,31 @@ Please provide an enhanced description focusing on what the user wants to see:
             prompt = prompt.replace("\n\nBased on", f"{context_str}\n\nBased on")
         
         try:
-            # Run the agent to get an enhanced narrative
+            # Run the agent to get an enhanced narrative with structured output
             logger.info(f"Generating narrative with choices for scene: {scene_id}")
             
             # Add retry logic for more reliable generation
             max_retries = 2
             retry_count = 0
-            enhanced_narrative = None
+            response = None
             
-            while retry_count <= max_retries and not enhanced_narrative:
+            while retry_count <= max_retries and not response:
                 try:
                     result = await SceneDescriber.agent.run(prompt)
-                    enhanced_narrative = result.output if hasattr(result, 'output') else str(result)
+                    # With ToolOutput, result.output will be a NarrativeResponse object
+                    response = result.output
+                    
+                    # Access the text field of the NarrativeResponse
+                    enhanced_narrative = response.text
                     
                     # Validate the narrative has sufficient quality
                     if len(enhanced_narrative) < 100:  # Too short
                         logger.warning(f"Generated narrative too short ({len(enhanced_narrative)} chars), retrying...")
-                        enhanced_narrative = None
+                        response = None
                         retry_count += 1
                     elif enhanced_narrative.count('.') < 5:  # Too few sentences
                         logger.warning("Generated narrative has too few sentences, retrying...")
-                        enhanced_narrative = None
+                        response = None
                         retry_count += 1
                     else:
                         # Good quality narrative
@@ -369,9 +382,11 @@ Please provide an enhanced description focusing on what the user wants to see:
                     retry_count += 1
                     
             # If we still don't have a good narrative after retries, use a fallback
-            if not enhanced_narrative:
+            if not response:
                 logger.warning("Failed to generate quality narrative after retries, using fallback")
-                enhanced_narrative = f"{base_narrative}\n\nYou consider your options carefully.\n"
+                # Create a fallback narrative
+                fallback_text = f"{base_narrative}\n\nYou consider your options carefully.\n"
+                return fallback_text
             
             logger.info(f"Generated narrative with choices: {enhanced_narrative[:50]}...")
             return enhanced_narrative

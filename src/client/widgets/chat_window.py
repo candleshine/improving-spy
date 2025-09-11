@@ -402,8 +402,39 @@ class ChatWindow(ScrollableContainer):
             content = ""
             if hasattr(message, "payload") and isinstance(message.payload, dict):
                 content = message.payload.get("content", "")
+                if not content and "text" in message.payload:
+                    content = message.payload.get("text", "")
             elif hasattr(message, "text"):
                 content = message.text
+                
+            # Check for malformed JSON in content (like embedded JSON responses)
+            if content and (content.startswith("</think>") or "\"type\":\"response\"" in content):
+                logger.info("Detected malformed JSON in narrative message, cleaning up")
+                
+                # Remove any </think> tags
+                if "</think>" in content:
+                    content = content.split("</think>", 1)[1].strip()
+                
+                # Try to extract the actual message content from embedded JSON
+                try:
+                    import json
+                    import re
+                    
+                    # Find JSON-like structure in the content
+                    json_match = re.search(r'\{.*\}', content)
+                    if json_match:
+                        json_str = json_match.group(0)
+                        json_data = json.loads(json_str)
+                        
+                        # Extract the actual content from the embedded JSON
+                        if isinstance(json_data, dict):
+                            if "payload" in json_data and isinstance(json_data["payload"], dict):
+                                if "content" in json_data["payload"]:
+                                    content = json_data["payload"]["content"]
+                                    logger.info(f"Extracted content from embedded JSON: {content[:50]}...")
+                except Exception as e:
+                    logger.error(f"Error parsing embedded JSON in narrative message: {e}")
+                    # Keep the original content if parsing fails
                 
             # Default to markdown for narrative messages for better formatting
             is_markdown = True

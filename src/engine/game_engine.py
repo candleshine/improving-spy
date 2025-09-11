@@ -99,12 +99,12 @@ class GameEngine:
         # Create a scene describer
         scene_describer = SceneDescriber()
         
-        # Generate an enhanced description
+        # Generate an enhanced description using ToolOutput
         description = await scene_describer.enhance_description(
             scene_data=scene_data,
             user_input=query
         )
-        
+        logger.info(f"Generated enhanced description: {description}")
         # Create the response object
         response = {
             "type": "narrative",

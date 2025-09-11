@@ -7,7 +7,7 @@ theme: default
 
 # Lesson 4: Message History, Multiple Agents & Structured Output
 
-### Building Stateful AI Applications with Pydantic AI
+## Building Stateful AI Applications with Pydantic AI
 
 <!-- note -->
 
@@ -201,17 +201,29 @@ Multiple agents let you simulate a **living world**.
 Force the LLM to return structured data.
 
 ```python
-from pydantic import BaseModel
-from pydantic_ai import Agent
+from pydantic import BaseModel, Field
+from typing import Optional
+from datetime import datetime
 from pydantic_ai.output import ToolOutput
 
-class Joke(BaseModel):
-    setup: str
-    punchline: str
+class NarrativeResponse(BaseModel):
+    """Structured response for narrative text."""
+    type: str = "narrative"
+    text: str
+    scene_id: Optional[str] = None
+    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    format: str = "markdown"
+    is_new_scene: bool = False
 
-agent = Agent('openai:gpt-4o', output_type=ToolOutput(Joke))
-result = agent.run_sync('Tell me a joke.')
-joke: Joke = result.output  # ✅ Guaranteed structure
+# Create ToolOutput instance for use with Pydantic AI agents
+narrative_output = ToolOutput(NarrativeResponse)
+
+# Use in an agent
+SceneDescriber.agent = Agent(
+    model=model,
+    system_prompt=self._get_system_prompt(),
+    output_type=narrative_output  # Use ToolOutput for structured responses
+)
 ```
 
 <!-- note -->
@@ -230,19 +242,60 @@ Generate valid JSON without defining a Pydantic model.
 
 ```python
 from pydantic_ai import Agent, StructuredDict
+from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.providers.ollama import OllamaProvider
 
-schema = {
+# Define a schema for scenario generation
+scenario_schema = {
     "type": "object",
     "properties": {
         "title": {"type": "string"},
-        "genre": {"type": "string"}
+        "description": {"type": "string"},
+        "setting": {"type": "string"},
+        "scenes": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "description": {"type": "string"},
+                    "choices": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "text": {"type": "string"},
+                                "outcome": {"type": "string"},
+                                "next_scene": {"type": "string"}
+                            },
+                            "required": ["text", "outcome"]
+                        }
+                    }
+                },
+                "required": ["name", "description", "choices"]
+            }
+        }
     },
-    "required": ["title"]
+    "required": ["title", "description", "setting", "scenes"]
 }
+```
 
-agent = Agent('openai:gpt-4o', output_type=StructuredDict(schema))
-result = agent.run_sync('Create a spy scenario')
-data = result.output  # → dict, guaranteed to match schema
+---
+
+```python
+# Create StructuredDict instance
+scenario_generator = StructuredDict(scenario_schema)
+
+# Use in an agent
+self.agent = Agent(
+    model=model,
+    system_prompt=self._get_system_prompt(),
+    output_type=scenario_generator  # Use StructuredDict for schema validation
+)
+
+# Get structured output
+result = await self.agent.run(prompt)
+scenario_data = result.output  # → dict, guaranteed to match schema
 ```
 
 <!-- note -->
@@ -317,19 +370,50 @@ This is how you build **immersive AI experiences**.
 Block invalid actions before they reach the GM.
 
 ```python
+from pydantic import BaseModel
+from pydantic_ai import Agent
+from pydantic_ai.output import ToolOutput
+
+# Define a validation model
 class ValidationResult(BaseModel):
     valid: bool
     reason: str
+    genre_appropriate: bool = True
+```
 
+---
+
+```python
+# Create ToolOutput for validation
+validation_output = ToolOutput(ValidationResult)
+
+# Create validator agent
 validator = Agent(
-    'gpt-4o-mini',
-    output_type=ToolOutput(ValidationResult)
+    model=OpenAIModel('llama3', provider=OllamaProvider()),
+    system_prompt="You validate user inputs for a spy-themed game.",
+    output_type=validation_output
 )
+```
 
-validation = await validator.run(user_input)
-if not validation.output.valid:
-    await websocket.send_json({"text": validation.output.reason})
-    return  # Skip GM
+---
+
+# Use in request processing
+
+```python
+async def process_user_input(user_input: str, websocket: WebSocket):
+    # Validate input first
+    validation = await validator.run(f"Validate this input: {user_input}")
+    
+    # Check if input is valid
+    if not validation.output.valid:
+        await websocket.send_json({
+            "type": "error",
+            "text": validation.output.reason
+        })
+        return  # Skip further processing
+        
+    # Continue with game master agent
+    result = await gm_agent.run(user_input, message_history=history)
 ```
 
 <!-- note -->
@@ -344,28 +428,33 @@ Saves tokens and improves UX.
 
 ## Summary: Building Stateful AI Apps
 
-✅ Use `message_history` to preserve context  
-✅ Store/load with `ModelMessagesTypeAdapter`  
-✅ Trim history with `history_processors`  
-✅ Use multiple agents for modularity  
-✅ Use `ToolOutput` or `StructuredDict` for reliable JSON  
-✅ Use WebSockets for real-time interaction  
-✅ Send structured events to the frontend  
-✅ Validate input before processing  
+✅ Use `message_history` to preserve context across agent runs  
+✅ Store/load with `ModelMessagesTypeAdapter` for persistent conversations  
+✅ Trim history with `history_processors` like `summarize_old_messages`  
+✅ Use multiple agents (`GameMasterAgent`, `NPCCatalog`) for specialized roles  
+✅ Use `ToolOutput` with models like `NarrativeResponse` for type-safe structured output  
+✅ Use `StructuredDict` with JSON schema for dynamic content like scenario generation  
+✅ Use WebSockets for real-time narrative events and choices  
+✅ Send structured events with proper typing (`narrative`, `npc_speak`)  
+✅ Validate user input with pre-validator agents for better UX  
 
-You now have the tools to build **real AI applications**, not just demos.
+You now have the tools to build **rich, interactive AI experiences** with proper state management.
 
 <!-- note -->
-Today wasn’t about games — it was about **state**.
+Today wasn’t about games — it was about **state** and **narrative flow**.
 
-You’ve learned how to:
+You've learned how to:
 
-- Give AI memory
-- Scale across roles
-- Stream responses
-- Persist conversations
+- Give AI memory through message history
+- Scale across roles with specialized agents
+- Create rich narrative experiences with structured output
+- Enhance storytelling with context-aware scene descriptions
+- Generate immersive narrative transitions between scenes
+- Use previous outcomes as context for coherent storytelling
+- Stream responses for real-time interaction
+- Persist conversations for long-term engagement
 
-These are the skills you need to build AI assistants, chatbots, agents, and more — in production.
+These are the skills you need to build AI assistants, chatbots, agents, and immersive experiences — in production.
 <!-- end note -->
 
 ---
@@ -379,7 +468,10 @@ These are the skills you need to build AI assistants, chatbots, agents, and more
 - 📘 [Pydantic AI Docs: Message History](https://ai.pydantic.dev/message-history/)
 - 💡 [Pydantic AI: Structured Output](https://ai.pydantic.dev/api/output/)
 - 📚 FastAPI WebSockets: [fastapi.tiangolo.com/advanced/websockets](https://fastapi.tiangolo.com/advanced/websockets/)
-- 🎮 Full example: Chronicle Engine on GitHub
+- 🎮 Full example: Improving Spy Engine in `src/engine/`
+- 📝 Example models: `src/engine/structured_output.py`
+- 🔄 Scenario generator: `src/engine/scenario_generator_agent.py`
+- 🖋️ Scene describer: `src/engine/scene_describer.py`
 
 <!-- note -->
 Now open the floor for questions.

@@ -1,3 +1,9 @@
+---
+marp: true
+theme: default
+author: Daniel Chen
+title: "🕵️ Week 4: Homework Assignment: Input Validator Agent"
+---
 
 ## 📚 Week 4 Homework Assignment: Build an Input Validator Agent
 
